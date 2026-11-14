@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import vm from 'node:vm';
+import {nativeWorker} from './lib/native-film.mjs';
 import {readFile} from 'node:fs/promises';
-import {createCanvas,Path2D} from '@napi-rs/canvas';
-import {validateFilmProgram,filmFingerprint} from '../dist/film-program.js';
+import {validateFilmProgram,filmFingerprint,FILM_ALIAS_NAMES} from '../dist/film-program.js';
 import {handleAPI} from '../worker/api.js';
 import {chipProgram,birthdayProgram} from './fixtures/film-code.mjs';
 const config={baseURL:'https://api.deepseek.com/v1',model:'deepseek-flash',apiKey:'sk-fixture-never-real-0123456'};
@@ -20,6 +19,12 @@ test('new animation code is parsed, time-driven and rejects environment access a
 test('label swapping cannot masquerade as a new code composition',()=>{
   assert.equal(filmFingerprint(chipProgram),filmFingerprint({...chipProgram,source:chipProgram.source.replace('FETCH  →  DECODE  →  EXECUTE','NEW WORDS')}));
   assert.notEqual(filmFingerprint(chipProgram),filmFingerprint(birthdayProgram));
+});
+test('a corrected label or color replaces the actual cached drawing even when its structural fingerprint is unchanged',async()=>{
+  const call=await nativeWorker(),changed={...chipProgram,source:chipProgram.source.replace('FETCH  →  DECODE  →  EXECUTE','READABLE  INSTRUCTIONS')};
+  assert.equal(filmFingerprint(changed),filmFingerprint(chipProgram));
+  const base={type:'render',id:2,key:'same-shot-cache',scene,palette:{bg:'#090b0f',ink:'#fff4df',gold:'#d7ac64',blue:'#7ac3dd'},width:576,height:324,time:8,inspect:true};
+  const before=await call({...base,program:chipProgram}),after=await call({...base,program:changed});assert.notEqual(before.stats.signature,after.stats.signature);
 });
 test('scene-code calls actual chat route with skill methods and precise shot context',async()=>{
   const response=await handleAPI(req('/api/scene-code'),{},{fetch:async(url,options)=>{
@@ -42,14 +47,40 @@ test('missing rendered review frames are rejected before billing and duplicate c
   const duplicate=await handleAPI(req('/api/scene-code',{...payload,previousDesigns:[{fingerprint:filmFingerprint(chipProgram)}]}),{},{fetch:async()=>model({...chipProgram,source:chipProgram.source.replace('FETCH  →  DECODE  →  EXECUTE','ONLY LABELS')})});assert.equal(duplicate.status,502);assert.equal((await duplicate.json()).error.code,'CODE_DUPLICATE');
 });
 
-async function nativeWorker(){
-  let reply;
-  const self={fonts:{add(){}},postMessage(value){reply?.(value);}};
-  const context=vm.createContext({self,Path2D,FontFace:class{async load(){return this;}},URLSearchParams,OffscreenCanvas:function(w,h){const canvas=createCanvas(w,h);canvas.transferToImageBitmap=()=>{const copy=createCanvas(canvas.width,canvas.height);copy.getContext('2d').drawImage(canvas,0,0);return copy;};return canvas;}});
-  vm.runInContext(await readFile(new URL('../dist/film-worker.js',import.meta.url),'utf8'),context,{timeout:3000});
-  const call=message=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('worker test timeout')),8000);reply=value=>{clearTimeout(timer);value.error?reject(new Error(value.error)):resolve(value);};self.onmessage({data:message});});
-  await call({type:'init',id:1,engine:await readFile(new URL('../dist/vendor/vibe-knowledge-film/vk.js',import.meta.url),'utf8'),fonts:[]});return call;
-}
+test('ss/lerp free helpers reproduce the former failure and now render with local shadowing',async()=>{
+  const source=chipProgram.source.replaceAll('VK.ss','ss').replaceAll('VK.lerp','lerp');
+  assert.throws(()=>new Function('fr','t','scene','VK',source)({w:400,h:240,rect(){},line(){},poly(){}},1,{duration:10,palette:{}},{clamp:x=>x}),/ss is not defined/);
+  const call=await nativeWorker();
+  const base={type:'render',id:2,scene,program:{...chipProgram,source},palette:{bg:'#090b0f',ink:'#fff4df',gold:'#d7ac64',blue:'#7ac3dd'},width:400,height:240,inspect:true};
+  validateFilmProgram(base.program);
+  const a=await call({...base,key:'aliases',time:2}),b=await call({...base,key:'aliases',time:7}),again=await call({...base,key:'aliases',time:2});
+  assert.ok(a.stats.coverage>.04);assert.notEqual(a.stats.signature,b.stats.signature);assert.equal(a.stats.signature,again.stats.signature);
+  const shadow={...base.program,source:'const {ss,lerp}=VK;\n'+source};validateFilmProgram(shadow);
+  const local=await call({...base,key:'shadow',program:shadow,time:2});assert.equal(a.stats.signature,local.stats.signature);
+});
+test('undefined names are caught before execution with lexical scopes, destructuring and callbacks',()=>{
+  for(const suffix of ['fr.circle(madeUp,t,10,{});','[1].map(x=>missingHelper(x,t));','{let inner=t;} fr.text(String(inner),0,0,{});','const named=function onlyInside(){return t;}; onlyInside();']){
+    assert.throws(()=>validateFilmProgram({...chipProgram,source:chipProgram.source+suffix}),{code:'UNDEFINED_SYMBOL'});
+  }
+  const scoped='const obj={x:t,label:"safe"}; const {x:pos=ss(t,0,1),...rest}=obj; function sum(a=t){return a+pos;} for(let step=0;step<3;step++){fr.circle(sum(step),t,2,{fill:rest.label});} try{sum();}catch(error){fr.text(error.message,0,0,{});}';
+  assert.doesNotThrow(()=>validateFilmProgram({...chipProgram,source:chipProgram.source+scoped}));
+});
+test('invalid returned code is retained and a targeted repair receives the actual error and source',async()=>{
+  const broken={...chipProgram,source:chipProgram.source+'\nfr.circle(unknownPosition,t,10,{});'};
+  const failed=await handleAPI(req('/api/scene-code'),{},{fetch:async()=>model(broken)});
+  assert.equal(failed.status,502);const diagnostic=await failed.json();assert.equal(diagnostic.error.code,'CODE_FORMAT');assert.equal(diagnostic.recovery.program.source,broken.source);assert.equal(diagnostic.recovery.causeCode,'UNDEFINED_SYMBOL');
+  const repaired=await handleAPI(req('/api/scene-code/repair',{...payload,program:diagnostic.recovery.program,issue:diagnostic.error.message,phase:'compile'}),{},{fetch:async(url,options)=>{
+    const messages=JSON.parse(options.body).messages;assert.match(messages[0].content,/本次只修复/);const input=JSON.parse(messages[1].content);assert.equal(input.program.source,broken.source);assert.match(input.issue,/unknownPosition/);assert.equal(input.scene.title,scene.title);return model(chipProgram);
+  }});
+  assert.equal(repaired.status,200);assert.equal((await repaired.json()).program.source,chipProgram.source);
+});
+test('nested program transport succeeds and non-JSON code returns a bounded repair draft',async()=>{
+  const wrapped=await handleAPI(req('/api/scene-code'),{},{fetch:async()=>model({program:chipProgram})});assert.equal(wrapped.status,200);
+  const raw='```javascript\nfunction draw(fr,t,scene,VK){ not complete';
+  const response=await handleAPI(req('/api/scene-code'),{},{fetch:async()=>new Response(JSON.stringify({choices:[{message:{content:raw},finish_reason:'stop'}],usage:{total_tokens:123}}),{headers:{'Content-Type':'application/json'}})});
+  assert.equal(response.status,502);const data=await response.json();assert.equal(data.recovery.draft,raw);assert.equal(data.recovery.program,null);
+  const fixed=await handleAPI(req('/api/scene-code/repair',{...payload,draft:raw,issue:'missing program'}),{},{fetch:async(url,options)=>{assert.equal(JSON.parse(JSON.parse(options.body).messages[1].content).draft,raw);return model(chipProgram);}});assert.equal(fixed.status,200);
+});
 test('actual upstream engine and web Worker bridge draw distinct objects, deterministic motion and seven ratios',async()=>{
   const call=await nativeWorker(),palette={bg:'#090b0f',ink:'#fff4df',gold:'#d7ac64',blue:'#7ac3dd'};
   const base={type:'render',id:2,key:'chip',scene,program:chipProgram,palette,width:576,height:324,inspect:true};

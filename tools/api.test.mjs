@@ -70,7 +70,7 @@ test('invalid JSON, unsupported kinds and non-finite data are refused', async ()
   assert.throws(() => validateScript('<script>alert(1)</script>'), /JSON/);
   const bad = script(); bad.scenes[0].kind = 'eval';
   assert.throws(() => validateScript(bad), error => error.code === 'SCRIPT_KIND');
-  const numeric = script(); numeric.scenes[0].visual = { values: ['NaN'] };
+  const numeric = script(); numeric.scenes[0].duration = NaN;
   assert.throws(() => validateScript(numeric), error => error.code === 'SCRIPT_FORMAT');
   const response = await handleAPI(req('/api/script', config, { topic: '概率' }), {}, { fetch: async () => asJSON({ choices: [{ message: { content: '不是JSON' } }] }) });
   assert.equal(response.status, 502);
@@ -156,7 +156,7 @@ test('video download uses original task and never sends API key to signed media 
     count++;
     if (count === 1) { assert.match(url, /\/tasks\/task-one$/); return asJSON({ output: { task_id: 'task-one', task_status: 'SUCCEEDED', video_url: 'https://dashscope-result-sh.oss-accelerate.aliyuncs.com/video.mp4?Expires=123' } }); }
     assert.match(url, /^https:\/\/dashscope-result-sh\.oss-accelerate\.aliyuncs\.com/);
-    assert.equal(options.headers, undefined);
+    assert.equal(options.headers?.Authorization,undefined);assert.match(options.headers.Accept,/video/);
     return new Response('mp4-bytes', { headers: { 'Content-Type': 'video/mp4' } });
   } });
   assert.equal(count, 2); assert.equal(await response.text(), 'mp4-bytes');
@@ -267,7 +267,7 @@ test('MiniMax V2 download queries original task and keeps keys off trusted media
   const response=await handleAPI(req('/api/video/content',miniVideo,{id:'task-123'}),{}, {fetch:async(url,options)=>{
     calls.push(url);
     if(calls.length===1){assert.match(url,/\/v2\/query\/video_generation\/task-123$/);assert.equal(options.headers.Authorization,'Bearer '+miniVideo.apiKey);return asJSON({id:'task-123',status:'succeeded',content:{url:'https://video-product.cdn.minimax.io/result.mp4?signature=example'}});}
-    assert.equal(options.headers,undefined);assert.equal(options.redirect,'error');return new Response(new Uint8Array([0,1,2]),{headers:{'Content-Type':'video/mp4'}});
+    assert.equal(options.headers?.Authorization,undefined);assert.match(options.headers.Accept,/video/);assert.equal(options.redirect,'error');return new Response(new Uint8Array([0,1,2]),{headers:{'Content-Type':'video/mp4'}});
   }});assert.equal(response.status,200);assert.equal(calls.length,2);
   const malicious=await handleAPI(req('/api/video/content',miniVideo,{id:'task-123'}),{}, {fetch:async()=>asJSON({task:{id:'task-123',status:'succeeded',content:{url:'https://api.minimax.cn.evil.example/internal.mp4'}}})});
   assert.equal((await malicious.json()).error.code,'VIDEO_URL');

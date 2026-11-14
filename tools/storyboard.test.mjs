@@ -36,7 +36,7 @@ test('format compatibility cannot invent missing scenes, narration, valid number
   assert.throws(()=>validateScript({title:'只有一个镜头',shots:[scene]},30),/1 个镜头/);
   const blank=script();blank.scenes[0].narration='';blank.scenes[0].caption='';assert.throws(()=>validateScript(blank,30),/缺少标题、旁白/);
   const bad=script();bad.scenes[0].duration=-2;assert.throws(()=>validateScript(bad,30));
-  const invalid=script();invalid.scenes[0].visual={values:['not-a-number']};assert.throws(()=>validateScript(invalid,30),/有限数字/);
+  const invalid=script();invalid.scenes[0].visual={values:['not-a-number']};const kept=validateScript(invalid,30);assert.deepEqual(kept.scenes[0].visual.values,[]);assert.deepEqual(kept.scenes[0].visual.valueNotes,['not-a-number']);
   assert.throws(()=>validateScript('<script>window.run()</script>',30),/JSON/);
 });
 test('root arrays from the provider become a valid project, never a relabelled demo',async()=>{

@@ -1,10 +1,10 @@
 # API 接入与使用
 
-本网站公开访问。每位访问者使用自己的 DeepSeek 与 MiniMax API Key，网站没有共享模型密钥或代付账户。密钥只存在于当前页面内存及当前请求中，服务端不保存；刷新后需要重新填写。本次改造未使用真实用户密钥、未提交付费请求，也未生成任何音视频。
+本网站公开访问。每位访问者配置自己的供应商、API URL、模型和 API Key，网站没有共享模型密钥或代付账户。密钥只存在于当前页面内存及当前请求中，服务端不保存；刷新后需要重新填写。本次改造未使用真实用户密钥、未提交付费请求，也未生成任何音视频。
 
 ## 已预设的模型
 
-接口设置面板只需要两份密钥：DeepSeek API Key，以及同时用于配音和视频的 MiniMax API Key。模型、服务地址和协议已经预设。
+接口设置包含文本、视觉返修、配音、视频四组供应商、协议、API Base URL、模型 ID 和 API Key。视觉返修可沿用文本接口或单独设置；配音和视频可在同域名下手动复用密钥。原 DeepSeek / MiniMax 预设仍可一键选择。下表为默认预设，所有模型 ID 和 URL 都可修改。
 
 | 功能 | 确定的模型 ID | 基础地址 | 原生协议 |
 | --- | --- | --- | --- |
@@ -33,7 +33,7 @@ MiniMax 国内预设使用 `api.minimax.cn`。账户、地区、余额和对应�
 
 接口只接受同源 Origin 的 JSON POST（健康检查除外），并限制体积、服务商公开域名、HTTPS、重定向及自定义端口。公开访问不表示其他人能使用你的模型账户；每次请求都需要访问者提供自己的 Key。项目和媒体保存在各访问者自己的浏览器页面，不共享。
 
-默认服务商域名包含 DeepSeek、MiniMax 国内/国际地址和已有兼容服务。自定义公开服务可由部署者使用非敏感环境变量 `EXTRA_PROVIDER_HOSTS` 添加，多个域名用英文逗号分隔。始终拒绝本地地址、IP、带内嵌账号的 URL 和非 HTTPS 地址。
+默认服务商域名包含 DeepSeek、MiniMax 国内/国际地址和已有兼容服务。界面中的自定义公开HTTPS服务会传入`customEndpoint:true`，代理先通过公开DNS查询验证A/AAAA地址，拒绝私有、回环及保留地址；重定向不转发密钥。部署者仍可用`EXTRA_PROVIDER_HOSTS`添加明确可信的公开服务域名。始终拒绝本地地址、IP、带内嵌账号的 URL 和非 HTTPS 地址。
 
 ## 本站接口
 
@@ -44,7 +44,10 @@ MiniMax 国内预设使用 `api.minimax.cn`。账户、地区、余额和对应�
 | `GET /api/health` | 无 | 本站能力与版本，不请求模型 |
 | `/api/test` | `{capability:"text"}`，也可为 speech/video | 鉴权及只读查询结果摘要 |
 | `/api/script` | `{topic,brief?,duration,ratio,style,audience,preferences,jsonMode?}` | `{script,usage,mayBeBillable}` |
+| `/api/script/restore` | `{draft,topic,duration?}`；不需要config或密钥 | 恢复已有分镜，不请求任何模型，`mayBeBillable:false` |
+| `/api/video/prompt` | `{scene,duration,ratio,style,topic}`；使用文本模型config | H3三段式英文提示词及用量，不创建视频任务 |
 | `/api/script/repair` | 原生成参数 + `{draft,issue}` | `{script,usage,repaired:true,mayBeBillable}`；最多1次由前端明确显示的格式整理 |
+| `/api/scene-code/repair` | `{scene,index,project,program,issue,phase,previousDesigns,preferences,beatTimes}` | `{program,fingerprint,skill,usage,mayBeBillable}` |
 | `/api/scene-code` | `{scene,index,project,previousDesigns,preferences,beatTimes}` | `{program,fingerprint,skill,usage,mayBeBillable}` |
 | `/api/review-scene` | 上述上下文 + `{program,frames:[三张JPEG dataURL],round}` | `{program,feedback,fingerprint,usage,mayBeBillable}` |
 | `/api/scene-art` | `{scene,index,sceneCount,project,previousDesigns,preferences,jsonMode?}` | `{composition,fingerprint,usage,mayBeBillable}` |
@@ -119,3 +122,27 @@ v0.3 采用两阶段：`/api/script` 先编排分镜，随后逐镜调用 `/api/
 `/api/script` 在事实与内容校验前，兼容 `script/storyboard/data/result/output/video/film` 包装、直接镜头数组、`shots/segments/分镜` 等常见字段、中英文旁白字段、秒数字符串与开始/结束时间。缺少的镜头时长按已有文案长度排程；不会把旧演示模板改名后当作新分镜。缺失镜头、缺失正文、无效数字和不支持的字段仍会报告具体问题。
 
 解析失败返回 `recovery:{draft,shape,finishReason,canRepair,usage}`：draft有长度上限并移除本次密钥；不落盘、不写日志。前端先显示正在整理及额外调用提示，最多发送一次 `/api/script/repair`，保留首轮用量。鉴权、限流、网络和取消不触发格式整理；第二次失败即停止，允许下载诊断内容。模型输出截断与字段问题分别显示。支持将 `repairFormats:false` 传给客户端 `generateScript` 来关闭追加请求。
+
+## 原生协议与自定义接口
+
+- OpenAI兼容：`/chat/completions`、Bearer鉴权，JSON模式可关闭；可填写Base URL或完整chat/completions URL。
+- Anthropic原生：`/messages`、`x-api-key`及`anthropic-version`，分离system提示词；内联JPEG转换为Anthropic图片块。
+- Gemini原生：`/models/{model}:generateContent`、`x-goog-api-key`头，JSON响应与内联JPEG，忽略thought响应块。
+- 供应商、URL、模型、JSON模式和视觉继承关系可保存；API Key不会写入本机持久存储、项目或源码包。
+- “数万亿次”等文字数量保留为`visual.valueNotes`并附`dataWarnings`；`visual.values`中不输出NaN、Infinity或猜测数值。代码模型读取这些文字约束后编写画面。
+
+## 本镜代码错误恢复
+
+生成/返修返回了源代码但未通过校验时，502响应含`error:{code:"CODE_FORMAT",message}`和`recovery:{program,phase,causeCode,feedback,usage}`。program长度至多60000字符，本次API Key会脱敏；不在服务器保存或执行。前端先保留源码和错误，最多请求一次`/api/scene-code/repair`，返回后重新通过静态及实际渲染检查。修复仍失败时，客户端按用户选择记录失败后继续下一镜或暂停；服务与环境错误始终暂停。用户可单镜或按范围重试。修复使用文本配置；看图返修使用视觉配置。未定义引用会在执行前报告`UNDEFINED_SYMBOL`。本地探针失败时不会提交新的代码生成请求。
+
+## 客户端生成范围
+
+`dist/scene-queue.js`在任何模型请求前验证起止编号及所选索引，再严格串行执行。范围以当前脚本时间线为准，可选未完成/全部/当前/自定义；默认跳过已有已完成代码画面。新建脚本的画面制作从第1镜开始。未选中镜头与已完成镜头不提交到`/api/scene-code`，其状态、画面与素材保持原值。生成中可取消；鉴权、限流、网络、环境或未知服务配置错误不会因“继续下一镜”重复请求整批。单镜内容/代码问题允许继续，失败仍保持未完成状态并展示原错误。
+
+## v0.7 兼容与用量
+
+scene-code/review接口会规范化有限的JSON包装和代码字段别名；不通过时始终保留至多70000字符的脱敏`recovery.draft`。修复接口可接收`program`或`draft`，并接受有界`qualityReport`；review接口接受真实`frameTimes`和测量报告，不再把每次采样都称作固定18%/48%/78%。服务端不执行模型代码。
+
+H3任务查询返回`duration`、`resolution`、`outputSeconds`等实际元数据供估算使用；视频错误会以不含密钥/提示词的route/code/status记日志。下载时不发送API Key到CDN。浏览器回退只允许官方受信任CDN、credentials:omit；该操作不创建新任务。保存的任务ID不因下载错误删除。
+
+费用估算在客户端按本页新请求统计，使用API返回的Token用量（包含失败生成返回的已消耗用量）、请求/返回视频秒数、语音计费字符数。轮询、结果下载和分镜恢复不计成新的生成调用。没有可确认用量或单价时显示待核实；不能用本地统计冒充供应商账单或账户余额。

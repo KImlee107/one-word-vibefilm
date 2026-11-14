@@ -22,3 +22,24 @@ for(let i=0;i<23;i++){const a=VK.ss(p,i*.006,i*.006+.12);fr.g({a},()=>{fr.circle
 fr.text(String(drawn)+' PAIRS',W*.5,H*.43,{font:'latin',size:S*.085,color:c.ink});
 fr.text('23 × 22 ÷ 2 = 253',W*.5,H*.76,{font:'mono',size:S*.03,color:c.gold,a:VK.ss(p,.75,.88)});
 `};
+// New portrait regression scene: a small, explicitly illustrative vector sum.
+export const portraitVectors={version:1,designIntent:'同一词的二维示意内容向量加入不同位置向量，算出不同结果；逐步展开与合并。',layout:'two-positions-two-readable-sums',heroObjects:['同一词的两份向量','两组位置向量','两次真实求和'],source:`
+const W=fr.w,H=fr.h,S=Math.min(W,H),p=VK.clamp(t/scene.duration),c=scene.palette;
+const xs=[W*.30,W*.70],ys=[H*.30,H*.56];
+for(let row=0;row<2;row++){
+ const y=ys[row],pos=[.1+.1*row,.2-.1*row];
+ fr.label('猫 · 位置'+(row+1),W*.5,y-H*.065,{size:S*.06,maxWidth:W*.8,color:c.ink});
+ for(let dim=0;dim<2;dim++){
+  const x=xs[0]+(dim-.5)*W*.12,px=xs[1]+(dim-.5)*W*.12;
+  fr.rect(x-W*.052,y-H*.028,W*.104,H*.056,{r:S*.012,fill:c.ink});
+  fr.text([.4,.6][dim].toFixed(1),x,y,{font:'mono',size:S*.048,color:c.bg});
+  fr.g({a:VK.ss(p,.12,.35)},()=>{fr.rect(px-W*.052,y-H*.028,W*.104,H*.056,{r:S*.012,color:c.gold,w:S*.003});fr.text(pos[dim].toFixed(1),px,y,{font:'mono',size:S*.048,color:c.ink});});
+ }
+ fr.label('+',W*.5,y,{size:S*.075,maxWidth:W*.1,color:c.gold,a:VK.ss(p,.12,.35)});
+ const grow=VK.ss(p,.36,.75),ry=y+H*.095;
+ fr.poly([[W*.3,y+H*.037],[W*.3,ry],[W*.44,ry]],{color:c.gold,w:S*.004,k:grow});
+ fr.poly([[W*.7,y+H*.037],[W*.7,ry],[W*.56,ry]],{color:c.gold,w:S*.004,k:grow});
+ fr.g({a:grow},()=>{for(let dim=0;dim<2;dim++){const x=W*.5+(dim-.5)*W*.12;fr.rect(x-W*.052,ry-H*.028,W*.104,H*.056,{r:S*.012,fill:c.gold});fr.text(([.4,.6][dim]+pos[dim]*grow).toFixed(1),x,ry,{font:'mono',size:S*.048,color:c.bg});}});
+}
+fr.label('相同的词，加入不同的位置',W*.5,H*.765,{size:S*.041,maxWidth:W*.9,color:c.ink});
+`};

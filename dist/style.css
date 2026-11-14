@@ -23,3 +23,5 @@
 .scene-code-details{margin:12px 0;border:1px solid var(--line,#ddd);border-radius:8px;padding:10px;font-size:11px}.scene-code-details summary{cursor:pointer;color:#666e56}.scene-code-details p{white-space:pre-line;line-height:1.7;color:#7b806f}.scene-code-details pre{background:#181d21;color:#dfd6bf;padding:12px;max-height:240px;overflow:auto;font:10px/1.6 monospace;white-space:pre;tab-size:2}
 
 .version-label{font-size:10px;color:#898e7e;border:1px solid #e3e5da;border-radius:4px;padding:2px 5px;white-space:nowrap}
+
+.creative-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}

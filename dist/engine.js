@@ -1,3 +1,4 @@
+import {normalizeVisualValues,visualNumber,visualValueText} from './visual-data.js';
 /* 见知 · Deterministic knowledge animation engine. No DOM or network needed. */
 import {validateComposition,drawComposition,compositionFingerprint} from './composition.js';
 import {getStyle,normalizeRatio,normalizeStyle,MAX_GENERATION_DURATION,MAX_PROJECT_DURATION} from './presets.js';
@@ -97,9 +98,10 @@ export function createProjectFromScript(input, options = {}) {
     const kind = SCRIPT_KINDS.includes(entry.kind) ? entry.kind : 'process';
     if (kind !== entry.kind) warnings.push(`第 ${index + 1} 镜分类已规范化，画面仍需单独设计。`);
     const labels = (Array.isArray(v.labels) ? v.labels : []).slice(0, 8).map(x => cleanText(x, 40));
-    const values = (Array.isArray(v.values) ? v.values : []).slice(0, 12).map(Number).filter(Number.isFinite).map(x => clamp(x, -1e12, 1e12));
-    const items = (Array.isArray(v.items) ? v.items : []).slice(0, 8).map(x => typeof x === 'object' && x ? { label: cleanText(x.label ?? x.title ?? x.text, 40), detail: cleanText(x.detail ?? x.description, 80), value: Number.isFinite(Number(x.value)) ? clamp(Number(x.value), -1e12, 1e12) : undefined } : { label: cleanText(x, 40) });
-    const scene = { id: `scene-script-${index + 1}`, title: cleanText(entry.title || `镜头 ${index + 1}`, 64), start, duration: clamp(Number(entry.duration) || 10, 1, 90) / total * duration, narration: cleanText(entry.narration, 1000), caption: cleanText(entry.caption || entry.narration || entry.title, 180), kind: `script:${kind}`, visual: { labels, values, items, unit: cleanText(v.unit, 16), note: cleanText(v.note, 80), description: cleanText(v.description, 600), action: cleanText(v.action, 400), formula: cleanText(v.formula, 120), emphasis: cleanText(v.emphasis, 100) }, variant: 0, revision: 0, motionSpeed: 1, particleCount: 34, detailLevel: 1,renderState:'pending' };
+    const {values,valueNotes,dataWarnings}=normalizeVisualValues(v);
+    for(const warning of dataWarnings)warnings.push(`第 ${index+1} 镜：${warning}`);
+    const items = (Array.isArray(v.items) ? v.items : []).slice(0, 8).map(x => typeof x === 'object' && x ? { label: cleanText(x.label ?? x.title ?? x.text, 40), detail: cleanText(x.detail ?? x.description, 80), value:visualNumber(x.value),valueText:visualValueText(x.valueText??x.value??'') } : { label: cleanText(x, 40) });
+    const scene = { id: `scene-script-${index + 1}`, title: cleanText(entry.title || `镜头 ${index + 1}`, 64), start, duration: clamp(Number(entry.duration) || 10, 1, 90) / total * duration, narration: cleanText(entry.narration, 1000), caption: cleanText(entry.caption || entry.narration || entry.title, 180), kind: `script:${kind}`, visual: { labels, values, valueNotes, dataWarnings, items, unit: cleanText(v.unit, 16), note: cleanText(v.note, 80), description: cleanText(v.description, 600), action: cleanText(v.action, 400), formula: cleanText(v.formula, 120), emphasis: cleanText(v.emphasis, 100) }, variant: 0, revision: 0, motionSpeed: 1, particleCount: 34, detailLevel: 1,renderState:'pending' };
     Object.assign(scene.visual,{layout:cleanText(v.layout,100),visualIntent:cleanText(v.visualIntent,600),heroObjects:(Array.isArray(v.heroObjects)?v.heroObjects:[]).slice(0,12).map(x=>cleanText(x,100)),beats:(Array.isArray(v.beats)?v.beats:[]).slice(0,8).filter(x=>x&&typeof x==='object').map(x=>({at:clamp(Number(x.at)||0,0,1),meaning:cleanText(x.meaning,200),change:cleanText(x.change,400)})),continuity:cleanText(v.continuity,600)});
     if(entry.composition){scene.composition=validateComposition(entry.composition);scene.renderState='complete';scene.compositionFingerprint=compositionFingerprint(scene.composition);}
     start += scene.duration;
