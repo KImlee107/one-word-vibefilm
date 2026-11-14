@@ -50,7 +50,7 @@
   </aside>
   <div class="app-shell">
     <header class="topbar">
-      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span></div>
+      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.4.1</span></div>
       <div class="topbar-actions">
         <span class="save-state" id="saveState"><span></span>已保存到本机</span>
         <button class="button quiet" id="importButton"><svg><use href="#i-folder"/></svg><span>打开项目</span></button>
@@ -67,6 +67,7 @@
         <div class="generation-heading"><div><span class="generation-kicker">CREATION IN PROGRESS</span><h2 id="generationTitle">正在构思分镜</h2></div><div class="generation-actions"><strong id="generationPercent">等待模型响应</strong><button class="button quiet" id="cancelGenerationButton" type="button">取消当前生成</button></div></div>
         <div class="generation-bar" id="generationBar" role="progressbar" aria-label="生成进度" aria-valuemin="0" aria-valuemax="100"><span id="generationFill"></span></div>
         <div class="generation-details"><span id="generationDetail">实际阶段与完成镜头数会显示在这里。</span><span id="generationElapsed">已用时 00:00</span></div>
+        <div class="generation-next" id="scriptFailureActions" hidden><p>此次生成已停止。可下载本次返回内容，查看缺失字段或其他格式问题。</p><button class="button secondary" id="downloadScriptFailure" type="button">下载本次返回内容</button></div>
         <div class="generation-next" id="generationNext" hidden><p id="generationNextText"></p><div><button class="button secondary" id="resumeArtButton" type="button">补齐未完成画面</button><button class="button primary" id="batchAIButton" type="button">选择并生成 AI 镜头</button></div></div>
       </section>
       <section class="editor-layout">
@@ -92,7 +93,7 @@
             <div class="field-title"><span>视觉风格</span><span class="muted">统一整片质感</span></div>
             <div class="style-grid expanded-styles" id="stylePresets" role="group" aria-label="视觉风格"></div><p class="style-description" id="styleDescription"></p>
             <div class="skill-status"><span class="status-dot"></span><a href="https://github.com/HeyChengC/vibe-knowledge-film" target="_blank" rel="noopener noreferrer">vibe-knowledge-film 已接入 ↗</a><small>现写代码 · 实际渲染 · 看图返修</small></div>
-            <label class="field-label" for="reviewRoundsSelect">视觉返修轮数</label><select id="reviewRoundsSelect"><option value="2" selected>2 轮 · 推荐质量</option><option value="1">1 轮 · 减少调用</option><option value="0">仅代码与静帧检查 · 费用较低</option></select><p class="review-note">每镜 1 次代码生成 + 所选轮数的看图返修，均调用 DeepSeek。耗时由模型与画面复杂度决定。</p>
+            <label class="field-label" for="reviewRoundsSelect">视觉返修轮数</label><select id="reviewRoundsSelect"><option value="2" selected>2 轮 · 推荐质量</option><option value="1">1 轮 · 减少调用</option><option value="0">仅代码与静帧检查 · 费用较低</option></select><p class="review-note">每镜 1 次代码生成 + 所选轮数的看图返修，均调用 DeepSeek。耗时由模型与画面复杂度决定。分镜格式不符时最多追加 1 次整理请求，并显示实际进度。</p>
             <div class="audio-settings">
               <label><span><svg><use href="#i-headphones"/></svg>中文旁白</span><input id="voiceToggle" type="checkbox" checked><i class="switch"></i></label>
               <label><span>中文字幕</span><input id="captionsToggle" type="checkbox" checked><i class="switch"></i></label>

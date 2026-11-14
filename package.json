@@ -1,6 +1,6 @@
 {
   "name": "jian-zhi-vibe-studio",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "可逐镜修改的科普代码动画工作台",

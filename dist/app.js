@@ -44,6 +44,7 @@ let playbackToken = 0;
 let preparingPlayback = false;
 let generation = {stage:'idle',started:0,total:0,completed:0,failed:0,detail:'',measurable:false};
 let generationTimer = null;
+let lastScriptFailure=null;
 
 try {
   const savedRules = JSON.parse(localStorage.getItem(PREFS) || '[]');
@@ -651,6 +652,7 @@ async function generateProject(event) {
   event.preventDefault();if(busy)return;
   const topic=$('topicInput').value.trim();if(topic.length<2)return toast('先输入你想讲清楚的主题',true);
   if(!canUse('text'))return showServiceConfig('text','先填写 DeepSeek API Key。生成将依次请求分镜和每镜独立画面，不会把通用模板替换文字后当作完成。');
+  lastScriptFailure=null;$('scriptFailureActions').hidden=true;
   pause();activeAbort=new AbortController();setBusy(true,'正在构思分镜…');
   setGenerationProgress({stage:'第一步 · 构思分镜',detail:'正在等待文本模型编排知识推演。此阶段没有可验证的百分比。',newRun:true});
   $('generateButton').querySelector('span').textContent='正在创作…';
@@ -658,14 +660,15 @@ async function generateProject(event) {
   try{
     const sourceMusic=project.musicBlob,sourceMusicAnalysis=project.musicAnalysis;
     const options={topic,brief:$('briefInput').value.trim().slice(0,18000),duration:Number($('durationSelect').value),ratio:selectedRatio,style:selectedStyle,mode:selectedMode,audience:'普通成年人',preferences:rules.join('\n')};
-    const script=await api.generateScript(configs.text,options,{signal:activeAbort.signal});
+    const script=await api.generateScript(configs.text,options,{signal:activeAbort.signal,onRepair:info=>setGenerationProgress({stage:'第一步 · 正在整理返回的分镜（1 / 1）',detail:info.reason+' 正在保留原内容并修正格式；此次会追加一次 DeepSeek 请求。'})});
     const next=engine.createProjectFromScript(script,options);if(!validProject(next))throw new Error('模型返回的分镜结构不完整，原项目保留。');
-    pushUndo();project=next;storyboardApplied=true;project.mode=selectedMode;project.brief=options.brief;if(sourceMusic instanceof Blob){project.musicBlob=sourceMusic;if(sourceMusicAnalysis)project.musicAnalysis=sourceMusicAnalysis;}project.isDemo=false;project.generatedFromApi=true;hasGenerated=true;
+    pushUndo();project=next;storyboardApplied=true;project.mode=selectedMode;project.brief=options.brief;project.scriptMeta=script.apiMeta;if(sourceMusic instanceof Blob){project.musicBlob=sourceMusic;if(sourceMusicAnalysis)project.musicAnalysis=sourceMusicAnalysis;}project.isDemo=false;project.generatedFromApi=true;hasGenerated=true;
     project.settings={music:$('musicToggle').checked,voice:$('voiceToggle').checked,captions:$('captionsToggle').checked};
     project.scenes.forEach(scene=>{scene.renderState='pending';delete scene.composition;delete scene.program;});selectedIndex=0;currentTime=0;releaseClipURL();updateProjectUI();saveLocal();
     await renderSceneArts(project,project.scenes.map((_,index)=>index),{signal:activeAbort.signal,stage:'第二步 · 逐镜独立设计画面'});
     toast(artMissing().length?'部分镜头尚未完成，可单独重试。':'代码画面已就绪；配音、AI 视频镜头和导出由你按需继续。');
   }catch(error){
+    if(!storyboardApplied&&error.recovery?.draft){lastScriptFailure={topic,code:error.code,message:error.message,shape:error.recovery.shape,finishReason:error.recovery.finishReason,draft:error.recovery.draft};$('scriptFailureActions').hidden=false;}
     if(storyboardApplied)finishGeneration(error.name==='AbortError'?'生成已取消':'生成未完成：'+error.message,{cancelled:error.name==='AbortError'});else{clearInterval(generationTimer);generationTimer=null;$('generationTitle').textContent=error.name==='AbortError'?'分镜请求已取消，原项目保留':'分镜生成未完成，原项目保留';$('generationDetail').textContent=error.name==='AbortError'?'尚未替换项目，也没有为新主题生成画面。':error.message;$('generationBar').classList.remove('indeterminate');$('generationPercent').textContent='未完成';$('generationNext').hidden=true;$('cancelGenerationButton').hidden=true;}toast(error.name==='AbortError'?'已取消，已有项目与完成画面保留。':error.message,true);
   }finally{setBusy(false);$('generateButton').querySelector('span').textContent='生成分镜与代码画面';activeAbort=null;updateProjectUI(false);}
 }
@@ -961,6 +964,7 @@ function showAbout() {
 
 initializePresets();
 $('createForm').addEventListener('submit', generateProject);
+$('downloadScriptFailure').addEventListener('click',()=>{if(!lastScriptFailure)return;saveDownload(new Blob([JSON.stringify(lastScriptFailure,null,2)],{type:'application/json;charset=utf-8'}),'分镜返回诊断.json').catch(e=>toast(e.message,true));});
 $('birthdayBriefButton').addEventListener('click',applyBirthdayBrief);
 $('alignMusicButton').addEventListener('click',applyMusicBeatToCurrentScenes);
 $('cancelGenerationButton').addEventListener('click',()=>{if(activeAbort){activeAbort.abort();$('generationDetail').textContent='正在取消尚未完成的请求，保留已完成的画面。';}});

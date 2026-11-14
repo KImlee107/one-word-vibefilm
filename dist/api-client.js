@@ -1,6 +1,6 @@
 /** Browser API client. Pass configuration from memory; no storage side effects. */
 export class VibeAPIError extends Error {
-  constructor(code, message, status = 0) { super(message); this.name = 'VibeAPIError'; this.code = code; this.status = status; }
+  constructor(code, message, status = 0, recovery = null) { super(message); this.name = 'VibeAPIError'; this.code = code; this.status = status; this.recovery=recovery; }
 }
 
 async function request(path, config, payload, { signal, binary = false, method = 'POST' } = {}) {
@@ -13,7 +13,7 @@ async function request(path, config, payload, { signal, binary = false, method =
   }
   if (!response.ok) {
     let data; try { data = await response.json(); } catch { /* A platform login or timeout page is not a successful API result. */ }
-    throw new VibeAPIError(data?.error?.code || 'HTTP_ERROR', data?.error?.message || `网站接口返回 HTTP ${response.status}，请确认已登录且后端已部署。`, response.status);
+    throw new VibeAPIError(data?.error?.code || 'HTTP_ERROR', data?.error?.message || `网站接口返回 HTTP ${response.status}，请确认已登录且后端已部署。`, response.status,data?.recovery||null);
   }
   if (binary) return response.blob();
   try { return await response.json(); } catch { throw new VibeAPIError('INVALID_RESPONSE', '网站接口未返回 JSON；请确认后端已部署并已登录。'); }
@@ -22,7 +22,19 @@ async function request(path, config, payload, { signal, binary = false, method =
 export const health = (options = {}) => request('/api/health', null, null, { ...options, method: 'GET' });
 export const testConnection = (config, { capability = 'text', signal } = {}) => request('/api/test', config, { capability }, { signal });
 // options.brief carries the optional full directing brief; the API bounds it to 18,000 characters.
-export async function generateScript(config, options, { signal } = {}) { const data = await request('/api/script', config, options, { signal }); return { ...data.script, apiMeta: { usage: data.usage, mayBeBillable: data.mayBeBillable } }; }
+export async function generateScript(config, options, { signal,onRepair=()=>{} } = {}) {
+  let data,initialUsage=null,repaired=false;
+  try{data=await request('/api/script',config,options,{signal});}
+  catch(error){
+    if(signal?.aborted)throw new DOMException('已取消','AbortError');
+    if(!error.recovery?.canRepair||!error.recovery.draft||options.repairFormats===false)throw error;
+    // Exactly one disclosed repair request; never restart the entire generation.
+    initialUsage=error.recovery.usage;onRepair({reason:error.message,shape:error.recovery.shape,attempt:1,maxAttempts:1});
+    if(signal?.aborted)throw new DOMException('已取消','AbortError');
+    data=await request('/api/script/repair',config,{...options,draft:error.recovery.draft,issue:error.message},{signal});repaired=true;
+  }
+  return {...data.script,apiMeta:{usage:data.usage,initialUsage,repaired,requests:repaired?2:1,mayBeBillable:data.mayBeBillable}};
+}
 export async function generateSceneArt(config, options, {signal}={}) {const data=await request('/api/scene-art',config,options,{signal});return {...data.composition,apiMeta:{usage:data.usage,mayBeBillable:data.mayBeBillable,fingerprint:data.fingerprint}};}
 export async function reviseSceneWithAI(config, options, { signal } = {}) { const data = await request('/api/revise', config, options, { signal }); return data.scene; }
 export const generateSpeech = (config, options, { signal } = {}) => request('/api/speech', config, options, { signal, binary: true });

@@ -44,6 +44,7 @@ MiniMax 国内预设使用 `api.minimax.cn`。账户、地区、余额和对应�
 | `GET /api/health` | 无 | 本站能力与版本，不请求模型 |
 | `/api/test` | `{capability:"text"}`，也可为 speech/video | 鉴权及只读查询结果摘要 |
 | `/api/script` | `{topic,brief?,duration,ratio,style,audience,preferences,jsonMode?}` | `{script,usage,mayBeBillable}` |
+| `/api/script/repair` | 原生成参数 + `{draft,issue}` | `{script,usage,repaired:true,mayBeBillable}`；最多1次由前端明确显示的格式整理 |
 | `/api/scene-code` | `{scene,index,project,previousDesigns,preferences,beatTimes}` | `{program,fingerprint,skill,usage,mayBeBillable}` |
 | `/api/review-scene` | 上述上下文 + `{program,frames:[三张JPEG dataURL],round}` | `{program,feedback,fingerprint,usage,mayBeBillable}` |
 | `/api/scene-art` | `{scene,index,sceneCount,project,previousDesigns,preferences,jsonMode?}` | `{composition,fingerprint,usage,mayBeBillable}` |
@@ -112,3 +113,9 @@ v0.3 采用两阶段：`/api/script` 先编排分镜，随后逐镜调用 `/api/
 ## 逐镜代码与视觉返修
 
 新创作默认使用 `/api/scene-code`，按实际安装的 [vibe-knowledge-film](VIBE_FILM.md) 为每镜独立编写绘图函数体。浏览器渲染18%、48%、78%静帧及重复确定性检查；每轮 `/api/review-scene` 通过 Chat Completions 的 `image_url` 输入发送这三张实际帧，返回看图反馈和修改后的完整代码。默认2轮，可在界面选择0或1轮控制成本。每次均为真实模型请求，没有隐藏无限重试。检查不通过不计完成。原 `/api/scene-art` 为旧项目兼容保留。
+
+## v0.4.1 分镜格式修复
+
+`/api/script` 在事实与内容校验前，兼容 `script/storyboard/data/result/output/video/film` 包装、直接镜头数组、`shots/segments/分镜` 等常见字段、中英文旁白字段、秒数字符串与开始/结束时间。缺少的镜头时长按已有文案长度排程；不会把旧演示模板改名后当作新分镜。缺失镜头、缺失正文、无效数字和不支持的字段仍会报告具体问题。
+
+解析失败返回 `recovery:{draft,shape,finishReason,canRepair,usage}`：draft有长度上限并移除本次密钥；不落盘、不写日志。前端先显示正在整理及额外调用提示，最多发送一次 `/api/script/repair`，保留首轮用量。鉴权、限流、网络和取消不触发格式整理；第二次失败即停止，允许下载诊断内容。模型输出截断与字段问题分别显示。支持将 `repairFormats:false` 传给客户端 `generateScript` 来关闭追加请求。
