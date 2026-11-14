@@ -1,6 +1,7 @@
+import {visualBible} from './visual-craft.js';
 import {buildSceneWithRecovery,creationSceneIndices} from './scene-recovery.js';
 import {createRunDiagnostics,directingBriefForTopic} from './run-diagnostics.js';
-import {sceneArtReady,selectSceneRange,orderedSceneIndices,runSceneQueue} from './scene-queue.js';
+import {sceneArtReady,selectSceneRange,orderedSceneIndices,runScenePasses} from './scene-queue.js';
 import {initializeAppearance} from './appearance.js';
 import {FILM_QUALITY_VERSION,filmQualityError} from './film-quality.js';
 import {usageLedger,priceFor,priceKey,setPriceOverride,estimateVideoCost,formatCost,PRICE_SOURCES} from './costs.js';
@@ -234,32 +235,39 @@ async function checkSelectedRange(){
 }
 function fullVideo(scene,p=project){return (p.videoClips||[]).some(clip=>clip.sceneId===scene.id&&clip.blob instanceof Blob&&Number(clip.start)<=scene.start+.05&&Number(clip.start)+Number(clip.duration)>=scene.start+scene.duration-.05);}
 function missingFrames(p=project){return p.scenes.filter(scene=>!artReady(scene)&&!fullVideo(scene,p));}
-function setGenerationProgress({stage,total=0,completed=0,failed=0,detail='',measurable=false,newRun=false}){
-  if(newRun||!generation.started){generation.started=Date.now();$('generationElapsed').textContent='已用时 00:00';}
-  generation={...generation,stage,total,completed,failed,detail,measurable};
-  if(newRun){runDiagnostics.begin(project);renderSceneFailures();lastScriptFailure=null;$('scriptFailureActions').hidden=true;usageLedger.begin(stage);$('videoTaskProgress').hidden=true;}
+function activateProjectAccounting(label='项目创作'){
+  const current=usageLedger.resume(typeof project.usageSessionId==='string'?project.usageSessionId:undefined,project.title||label,project.usageSnapshot);
+  project.usageSessionId=current.id;delete project.usageSnapshot;return current;
+}
+function setGenerationProgress({stage,total=0,completed=0,failed=0,detail='',measurable=false,newRun=false,newProject=false,successOnly=false}){
+  if(newRun||!generation.started)generation.started=Date.now();
+  generation={...generation,stage,total,completed,failed,detail,measurable,successOnly};
+  if(newRun){runDiagnostics.begin(project);renderSceneFailures();lastScriptFailure=null;$('scriptFailureActions').hidden=true;if(newProject)usageLedger.begin(stage);else activateProjectAccounting(stage);$('videoTaskProgress').hidden=true;}
+  usageLedger.startClock();
+  $('generationElapsed').textContent='累计用时 '+formatTime(usageLedger.elapsedMs()/1000);
   $('generationPanel').hidden=false;
   $('generationTitle').textContent=stage;
   $('generationDetail').textContent=detail;
-  const bar=$('generationBar'),processed=Math.min(total,completed+failed),percent=total?Math.floor(processed/total*100):0;
+  const bar=$('generationBar'),processed=Math.min(total,completed+failed),percent=total?Math.floor((successOnly?completed:processed)/total*100):0;
   bar.classList.toggle('indeterminate',!measurable);bar.classList.toggle('failed',failed>0);
   if(measurable){bar.setAttribute('aria-valuenow',String(percent));bar.setAttribute('aria-valuetext',`已处理 ${processed} / ${total} 镜，完成 ${completed} 镜，失败 ${failed} 镜`);$('generationFill').style.width=percent+'%';$('generationPercent').textContent=failed?`已处理 ${processed} / ${total} · 完成 ${completed} · 失败 ${failed}`:`${completed} / ${total} 镜 · ${percent}%`;}
   else{bar.removeAttribute('aria-valuenow');bar.setAttribute('aria-valuetext','等待模型实际响应');$('generationFill').style.width='';$('generationPercent').textContent='等待模型响应';}
-  if(!generationTimer)generationTimer=setInterval(()=>{$('generationElapsed').textContent='已用时 '+formatTime((Date.now()-generation.started)/1000);},1000);
+  if(!generationTimer)generationTimer=setInterval(()=>{$('generationElapsed').textContent='累计用时 '+formatTime(usageLedger.elapsedMs()/1000);usageLedger.checkpointClock();},1000);
   $('cancelGenerationButton').hidden=false;$('generationNext').hidden=true;
 }
 function finishGeneration(message,{cancelled=false}={}){
   if(!generation.started)generation.started=Date.now();
   clearInterval(generationTimer);generationTimer=null;
-  $('generationElapsed').textContent='已用时 '+formatTime((Date.now()-generation.started)/1000);
+  usageLedger.pauseClock();$('generationElapsed').textContent='累计用时 '+formatTime(usageLedger.elapsedMs()/1000);
   if(!generation.measurable)$('generationPercent').textContent=generation.stage==='idle'?'尚未开始':'未完成';
-  $('generationTitle').textContent=cancelled?'生成已取消，已完成画面已保留':message;
+  $('generationTitle').textContent=cancelled?'生成已暂停，已完成画面与累计统计已保留':message;
   $('cancelGenerationButton').hidden=true;$('generationBar').classList.remove('indeterminate');
   $('videoTaskProgress').setAttribute('aria-busy','false');
   const missing=artMissing();
   if(project.isDemo){$('generationNext').hidden=true;$('generationDetail').textContent='尚未完成新的分镜生成，原内置示意保留。';if(!generation.measurable)$('generationPercent').textContent='未完成';return;}
   $('generationNext').hidden=false;
   $('resumeArtButton').hidden=missing.length===0;
+  $('continueQueueButton').hidden=missing.length===0;
   $('resumeArtButton').textContent=`选择范围 / 补齐 ${missing.length} 镜`;
   $('batchAIButton').hidden=project.mode==='code';
   $('resumeVideoTasksButton').hidden=!project.scenes.some(s=>s.videoTask?.id&&!fullVideo(s));
@@ -268,7 +276,7 @@ function finishGeneration(message,{cancelled=false}={}){
 }
 function sceneArtPayload(target,index){
   const source=target.scenes[index];
-  return {scene:{title:source.title,narration:source.narration,caption:source.caption,duration:source.duration,kind:source.kind,visual:source.visual},index,sceneCount:target.scenes.length,project:{title:target.title,topic:target.topic,summary:target.summary||'',duration:target.duration,ratio:target.ratio,style:target.style,brief:target.brief||'',scenes:target.scenes.map(scene=>({title:scene.title,kind:String(scene.kind||'process').replace(/^script:/,''),visual:scene.visual}))},previousDesigns:target.scenes.filter((scene,i)=>i!==index&&artReady(scene)).map(scene=>({layout:(scene.program||scene.composition).layout,designIntent:(scene.program||scene.composition).designIntent,fingerprint:scene.program?filmFingerprint(scene.program):compositionFingerprint(scene.composition)})),preferences:(source.artInstruction?'当前镜头修改要求：'+source.artInstruction+'\n':'')+rules.join('\n'),beatTimes:canApplyMusicBeat(target)?sceneMusicBeats(musicAnalysis(target),source.start,source.duration):[],referenceStyle:'独立构图、真实物件结构、关系与数量随推演变化；黑金参考采用衬线字、细线、暖光与克制尘点。禁止重复圆点仅换标签。'};
+  return {scene:{title:source.title,narration:source.narration,caption:source.caption,duration:source.duration,kind:source.kind,visual:source.visual},index,sceneCount:target.scenes.length,project:{title:target.title,topic:target.topic,summary:target.summary||'',duration:target.duration,ratio:target.ratio,style:target.style,brief:target.brief||'',visualBible:target.visualBible||visualBible(null,target.style),scenes:target.scenes.map(scene=>({title:scene.title,kind:String(scene.kind||'process').replace(/^script:/,''),visual:scene.visual}))},previousDesigns:target.scenes.filter((scene,i)=>i!==index&&artReady(scene)).map(scene=>({layout:(scene.program||scene.composition).layout,designIntent:(scene.program||scene.composition).designIntent,fingerprint:scene.program?filmFingerprint(scene.program):compositionFingerprint(scene.composition)})),preferences:(source.artInstruction?'当前镜头修改要求：'+source.artInstruction+'\n':'')+rules.join('\n'),beatTimes:canApplyMusicBeat(target)?sceneMusicBeats(musicAnalysis(target),source.start,source.duration):[],referenceStyle:'独立构图、真实物件结构、关系与数量随推演变化；黑金参考采用衬线字、细线、暖光与克制尘点。禁止重复圆点仅换标签。'};
 }
 function canApplyMusicBeat(p=project){return validRhythm(musicAnalysis(p));}
 function refreshMusicAnalysisStatus(){
@@ -299,7 +307,8 @@ function applyBirthdayBrief(){
   if(busy)return toast('请等当前任务完成后再套用方案。');
   $('topicInput').value='23个人中，至少两个人生日相同的概率为什么超过50%？';$('durationSelect').value='120';selectedRatio='16:9';selectedStyle='noir';selectedMode='code';$('ratioSelect').value=selectedRatio;
   all('[data-style]').forEach(button=>{button.classList.toggle('selected',button.dataset.style===selectedStyle);button.setAttribute('aria-pressed',String(button.dataset.style===selectedStyle));});
-  $('styleDescription').textContent=getStyle(selectedStyle).description;setMode(selectedMode);
+  $('styleDescription').textContent=getStyle(selectedStyle).description;
+setMode(selectedMode);
   $('briefInput').value=String(BIRTHDAY_BRIEF).slice(0,18000);briefBinding={topic:$('topicInput').value,brief:$('briefInput').value};$('reuseBriefToggle').checked=false;$('creativeBriefDetails').open=true;$('topicHint').textContent='生日悖论方案已填入 · 点击生成才替换当前项目';toast('方案已填入：120 秒、16:9、黑金叙事。当前项目和媒体尚未改变。');
 }
 function checkSceneFrame(target,index,composition){
@@ -313,11 +322,14 @@ async function renderSceneArts(target,indices,{signal,stage='正在按顺序设�
   const reviewRounds=Math.max(0,Math.min(2,Number($('reviewRoundsSelect').value)||0));
   const recoveryPolicy=$('sceneRecoveryPolicy').value;
   const states=new Map(indices.map(index=>[index,'pending']));
+  let currentPass=1;const maxPasses=Number($('autoPassesSelect').value)||2;
+  target.renderQueue={scopeSceneIds:indices.map(i=>target.scenes[i].id),maxPasses,currentPass:1,status:'running'};
   const counts=()=>({completed:[...states.values()].filter(v=>v==='complete').length,failed:[...states.values()].filter(v=>v==='failed').length});
-  const update=detail=>setGenerationProgress({stage,total:indices.length,...counts(),detail,measurable:true});
+  const update=detail=>setGenerationProgress({stage:`${stage} · 第 ${currentPass}/${maxPasses} 轮`,total:indices.length,...counts(),detail,measurable:true,successOnly:true});
   const numbered=indices.map(i=>i+1).join(' → ');
   update('生成顺序：'+numbered+'。正在检查本地绘图环境，此步骤不调用模型。');
-  const result=await runSceneQueue({indices,sceneCount:target.scenes.length,signal,failureMode,
+  const result=await runScenePasses({indices,sceneCount:target.scenes.length,signal,failureMode,maxPasses,isComplete:index=>artReady(target.scenes[index]),
+    onPass:({pass,indices:remaining})=>{currentPass=pass;target.renderQueue.currentPass=pass;update(pass===1?'正在按编号处理所选镜头。':`上一轮已结束，本轮只补做 ${remaining.map(i=>i+1).join('、')} 镜；成功镜头、累计时间和费用继续保留。`);saveLocal();},
     preflight:()=>ensureFilmRenderer({signal}),
     onStart:index=>{
       const scene=target.scenes[index];scene.renderState='generating';delete scene.renderError;states.set(index,'generating');
@@ -346,7 +358,7 @@ async function renderSceneArts(target,indices,{signal,stage='正在按顺序设�
       if(target.scenes.some((other,i)=>i!==index&&artReady(other)&&other.program&&filmFingerprint(other.program)===fingerprint))throw Object.assign(new Error('此镜画面代码与已有镜头重复，已拒绝仅换标签。'),{code:'CODE_DUPLICATE',phase:'inspect'});
       scene.program=program;delete scene.composition;delete scene.renderDuration;scene.sourceOffset=0;scene.beatTimes=context.beatTimes;scene.thumbnail=inspection.thumbnail;
       scene.renderState='complete';target.isDemo=false;target.generatedFromApi=true;hasGenerated=true;
-      scene.artMeta={fingerprint,usage,reviews,codeRepairs:repairs,reviewRounds,skill:FILM_SKILL,recovery:result.recovery,quality:inspection.quality,qualityVersion:FILM_QUALITY_VERSION,frameStats:inspection.stats.map(({coverage,bounds,signature,texts})=>({coverage,bounds,signature,textCount:texts?.length||0}))};
+      scene.artMeta={fingerprint,usage,reviews,codeRepairs:repairs,reviewRounds,pass:currentPass,skill:FILM_SKILL,recovery:result.recovery,quality:inspection.quality,qualityVersion:FILM_QUALITY_VERSION,frameStats:inspection.stats.map(({coverage,bounds,signature,texts})=>({coverage,bounds,signature,textCount:texts?.length||0}))};
       delete scene.draftProgram;delete scene.draftThumbnail;delete scene.draftMeta;delete scene.codeFailure;delete scene.draftReady;delete scene.renderError;
       if(!playing&&selectedIndex===index&&currentTime<=scene.start+.02)currentTime=scene.start+Math.min(1,scene.duration*.12);
     },
@@ -361,10 +373,11 @@ async function renderSceneArts(target,indices,{signal,stage='正在按顺序设�
       const {completed,failed}=counts();update(`本次按顺序处理 ${completed+failed} / ${indices.length} 镜：完成 ${completed} 镜，失败 ${failed} 镜。失败原因保留在下方列表，范围外的镜头保持不变。`);
     }
   });
+  target.renderQueue.status=result.cancelled?'paused':result.paused?'blocked':result.pending.length?'incomplete':'complete';target.renderQueue.remainingSceneIds=result.pending.map(i=>target.scenes[i].id);
   updateProjectUI();saveLocal();
   const {completed,failed}=counts();
-  const stopped=result.outcomes.at(-1);
-  finishGeneration(result.paused?`第 ${stopped.index+1} 镜未完成，后续调用已暂停`:`所选范围已处理：完成 ${completed} 镜${failed?'，失败 '+failed+' 镜':''}`,{cancelled:result.cancelled});
+  const stopped=result.attempts.at(-1);
+  finishGeneration(result.paused?`第 ${stopped.index+1} 镜未完成，后续调用已暂停`:`已处理 ${result.passes} 轮：完成 ${completed} 镜${failed?'，'+failed+' 镜仍需处理，可继续未完成镜头':''}`,{cancelled:result.cancelled});
   return result;
 }
 async function retrySceneArt(indices,{instruction='',fresh=false,failureMode=$('sceneFailureMode').value}={}){
@@ -391,15 +404,16 @@ function toast(message, error = false) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $('toast').hidden = true; }, error ? 6500 : 4200);
 }
-function serializable(p) {
-  return JSON.parse(JSON.stringify(p, (key, value) => {
+function serializable(p,{accounting=true}={}) {
+  const snapshot=accounting?usageLedger.snapshot(p.usageSessionId):null;
+  return JSON.parse(JSON.stringify({...p,usageSnapshot:snapshot||undefined}, (key, value) => {
     if (['voiceBlob', 'musicBlob', 'voiceClips', 'videoClips'].includes(key) || value instanceof Blob) return undefined;
     return value;
   }));
 }
 function saveLocal() {
   try {
-    localStorage.setItem(STORAGE, JSON.stringify(serializable(project)));
+    localStorage.setItem(STORAGE, JSON.stringify(serializable(project,{accounting:false})));
     $('saveState').lastChild.textContent = '已保存到本机';
   } catch {
     $('saveState').lastChild.textContent = '本机储存不可用';
@@ -434,6 +448,7 @@ function setBusy(value, message) {
   busy = value;
   $('generateButton').disabled = value;
   $('reviewRoundsSelect').disabled=value;
+  $('autoPassesSelect').disabled=value;$('continueQueueButton').disabled=value;
   $('creationWorkflow').disabled=value;$('sceneRecoveryPolicy').disabled=value;
   $('musicSourceSelect').disabled=value;$('beatSyncToggle').disabled=value;$('viewRhythmPlanButton').disabled=value;
   $('redesignSceneButton').disabled=value;$('rewriteSceneButton').disabled=value;
@@ -647,7 +662,7 @@ function renderInspector() {
   $('sceneCodeSource').textContent=program?.source||scene.codeFailure?.draft||'';
   $('downloadCodeFailure').hidden=!scene.codeFailure&&!scene.renderError;
   const checks=scene.artMeta?.reviews||scene.draftMeta?.reviews||[];
-  $('sceneCodeChecks').textContent=program?(scene.renderState==='complete'?'已完成':'草稿 · 尚在制作')+' · '+checks.length+' 轮看图返修\n'+checks.map(r=>'第 '+r.round+' 轮：'+r.feedback).join('\n'):'';
+  $('sceneCodeChecks').textContent=program?(program.shotPlan?['主体：'+(program.shotPlan.focalObject||''),'动作：'+(program.shotPlan.visibleChange||''),'构图：'+(program.shotPlan.framing||''),'材质：'+(program.shotPlan.material||'')].join('\n')+'\n':'')+(scene.renderState==='complete'?'已完成':'草稿 · 尚在制作')+' · '+checks.length+' 轮看图返修\n'+checks.map(r=>'第 '+r.round+' 轮：'+r.feedback).join('\n'):'';
 
   $('sceneNarration').value = scene.narration || scene.caption || '';
   $('sceneVersion').textContent = scene.revision ? '修改版本 ' + scene.revision : project.isDemo ? '交互示意' : '原始版本';
@@ -672,6 +687,7 @@ function updateProjectUI(renderShots = true) {
   $('previewNote').lastChild.textContent=lastScriptFailure?`当前预览来自本机保存的《${project.title}》；本次新请求未应用，可恢复下载的分镜或继续已有画面制作。`:project.isDemo?'当前是内置示意。新创作按 vibe-knowledge-film 流程逐镜写代码，并根据实际画面返修。':missing.length?'分镜已生成，画面仍在逐镜制作；未完成的镜头不会用旧模板冒充。':project.mode==='code'&&!artMissing().length?'独立代码画面已就绪；导出时逐帧渲染并合成配音、配乐和字幕。':`当前已有 ${aiCount} 镜真实 AI 视频，其余使用已完成代码画面；可按需继续生成。`;
   if(!busy)$('projectStatus').textContent=project.isDemo?'当前为内置示意，尚未调用 API':missing.length?`${project.scenes.length-missing.length} / ${project.scenes.length} 镜画面完成`:`画面已就绪 · ${project.scenes.length} 镜`;
   refreshMusicAnalysisStatus();
+  $('visualBibleText').textContent=Object.entries(visualBible(project.visualBible,project.style)).filter(([k])=>!['origin','style'].includes(k)).map(([k,v])=>v).join('\n');
   $('voiceToggle').checked=!!project.settings.voice;$('captionsToggle').checked=!!project.settings.captions;$('musicToggle').checked=!!project.settings.music;
   updateTransport();renderInspector();if(renderShots)renderTimeline();updateSceneRangeControls();renderSceneFailures();renderNeeded=true;
 }
@@ -716,11 +732,11 @@ function showModes() {
 }
 function refreshUsage(){
   const s=usageLedger.summary(),done=s.settled.map(formatCost).join(' + '),pending=s.pending.map(formatCost).join(' + ');
-  $('usageSummary').textContent=s.calls?(done?'已返回用量约 '+done:'费用待确认')+(pending?' · 已提交预算 '+pending:'')+(s.unknown?` · ${s.unknown} 次请求单价 / 用量待确认`:''):'本次尚无新增生成请求';
-  $('usageNote').textContent=`本次记录 ${s.calls} 次生成 / 返修请求。按官方刊例价估算，处理中及失败任务不视为免费；套餐、优惠、峰谷时段与实际扣费以官方账单为准。单价核对：${PRICE_SOURCES.checked}。`;
+  $('usageSummary').textContent=s.calls?(done?'已返回用量约 '+done:'费用待确认')+(pending?' · 已提交预算 '+pending:'')+(s.unknown?` · ${s.unknown} 次请求单价 / 用量待确认`:''):'本项目尚无已记录的生成请求';
+  $('usageNote').textContent=`本项目累计记录 ${s.calls} 次生成 / 返修请求，重试与续跑合并统计。按官方刊例价估算，处理中及失败任务不视为免费；套餐、优惠、峰谷时段与实际扣费以官方账单为准。单价核对：${PRICE_SOURCES.checked}。`+(usageLedger.persistenceError?' 当前浏览器未能持久保存，请导出用量记录。':'');
 }
 function showUsageDetails(){
-  const frag=document.createDocumentFragment();frag.append(el('p','modal-copy','仅记录本页的用量和任务编号，不含密钥、旁白或提示词。历史页面产生的费用需在官方控制台查看；取回原任务不重新提交生成。'));
+  const frag=document.createDocumentFragment();frag.append(el('p','modal-copy','按项目保留本机最近20个创作会话的用量与累计生成时间，不保存密钥、旁白或提示词。刷新后可恢复已保存统计；旧版未保存的数据仍需导出的记录或官方账单核对。取回原任务不重新提交生成。'));
   const sessions=usageLedger.export();
   for(const session of sessions.slice().reverse()){
     frag.append(el('h3','',session.label));
@@ -834,7 +850,7 @@ async function generateProject(event) {
   lastScriptFailure=null;$('scriptFailureActions').hidden=true;
   if($('creationWorkflow').value!=='storyboard'&&Number($('reviewRoundsSelect').value)>0&&!(effectiveVision(configs)?.apiKey&&effectiveVision(configs)?.baseURL&&effectiveVision(configs)?.model))return showServiceConfig('vision','请先配置视觉返修模型，或将返修轮数改为0。');
   pause();activeAbort=new AbortController();setBusy(true,'正在构思分镜…');
-  setGenerationProgress({stage:'第一步 · 构思分镜',detail:'正在等待文本模型编排知识推演。此阶段没有可验证的百分比。',newRun:true});
+  setGenerationProgress({stage:'第一步 · 构思分镜',detail:'正在等待文本模型编排知识推演。此阶段没有可验证的百分比。',newRun:true,newProject:true});
   $('generateButton').querySelector('span').textContent='正在创作…';
   let storyboardApplied=false;
   try{
@@ -845,6 +861,7 @@ async function generateProject(event) {
     const script=await api.generateScript(configs.text,options,{signal:activeAbort.signal,onRepair:info=>setGenerationProgress({stage:'第一步 · 正在整理返回的分镜（1 / 1）',detail:info.reason+' 正在保留原内容并修正格式；此次会追加一次文本模型请求。'})});
     const next=engine.createProjectFromScript(script,options);if(!validProject(next))throw new Error('模型返回的分镜结构不完整，原项目保留。');
     pushUndo();project=next;storyboardApplied=true;project.mode=selectedMode;project.brief=options.brief;project.scriptMeta=script.apiMeta;if(sourceMusic instanceof Blob){project.musicBlob=sourceMusic;if(sourceMusicAnalysis)project.musicAnalysis=sourceMusicAnalysis;}project.isDemo=false;project.generatedFromApi=true;hasGenerated=true;
+    project.usageSessionId=usageLedger.current.id;usageLedger.current.label=project.title;usageLedger.persist();
     runDiagnostics.begin(project);$('briefInput').value=options.brief;briefBinding={topic,brief:options.brief};
     if(script.normalizations?.length)toast(script.normalizations.join(' '));
     project.settings={music:$('musicToggle').checked,voice:$('voiceToggle').checked,captions:$('captionsToggle').checked,musicSource:options.musicSource,musicStyle:options.musicStyle,rhythmEnabled:options.rhythmEnabled};project.rhythmPlan=script.rhythmPlan||null;
@@ -855,7 +872,7 @@ async function generateProject(event) {
     toast(workflow==='storyboard'?'分镜已生成，可先编辑后按范围制作画面。':workflow==='pilot'?'前两镜样片已处理，其余镜头尚未调用。预览后可按范围继续。':artMissing().length?'部分镜头尚未完成，可单独重试。':'代码画面已就绪；配音、AI 视频镜头和导出由你按需继续。');
   }catch(error){
     if(!storyboardApplied&&error.recovery?.draft){lastScriptFailure={topic,code:error.code,message:error.message,shape:error.recovery.shape,finishReason:error.recovery.finishReason,draft:error.recovery.draft};$('scriptFailureActions').hidden=false;const canContinue=!project.isDemo&&project.topic?.trim()===topic&&artMissing().length>0;$('continueSavedStoryboard').hidden=!canContinue;$('continueSavedStoryboard').textContent=`继续已有 ${project.scenes.length} 镜画面制作`;}
-    if(storyboardApplied)finishGeneration(error.name==='AbortError'?'生成已取消':'生成未完成：'+error.message,{cancelled:error.name==='AbortError'});else{clearInterval(generationTimer);generationTimer=null;$('generationTitle').textContent=error.name==='AbortError'?'分镜请求已取消，原项目保留':'分镜生成未完成，原项目保留';$('generationDetail').textContent=error.name==='AbortError'?'尚未替换项目，也没有为新主题生成画面。':error.message;$('generationBar').classList.remove('indeterminate');$('generationPercent').textContent='未完成';$('generationNext').hidden=true;$('cancelGenerationButton').hidden=true;}toast(error.name==='AbortError'?'已取消，已有项目与完成画面保留。':error.message,true);
+    if(storyboardApplied)finishGeneration(error.name==='AbortError'?'生成已取消':'生成未完成：'+error.message,{cancelled:error.name==='AbortError'});else{clearInterval(generationTimer);generationTimer=null;usageLedger.pauseClock();$('generationElapsed').textContent='累计用时 '+formatTime(usageLedger.elapsedMs()/1000);$('generationTitle').textContent=error.name==='AbortError'?'分镜请求已取消，原项目保留':'分镜生成未完成，原项目保留';$('generationDetail').textContent=error.name==='AbortError'?'尚未替换项目，也没有为新主题生成画面。':error.message;$('generationBar').classList.remove('indeterminate');$('generationPercent').textContent='未完成';$('generationNext').hidden=true;$('cancelGenerationButton').hidden=true;}toast(error.name==='AbortError'?'已取消，已有项目与完成画面保留。':error.message,true);
   }finally{setBusy(false);$('generateButton').querySelector('span').textContent='生成分镜与代码画面';activeAbort=null;updateProjectUI(false);}
 }
 
@@ -1191,6 +1208,7 @@ $('beatSyncToggle').addEventListener('change',()=>{project.settings.rhythmEnable
 $('musicSourceSelect').addEventListener('change',()=>{if(busy)return;pause();pushUndo();project.settings.musicSource=$('musicSourceSelect').value;project.settings.music=true;markChanged();if(project.settings.musicSource==='custom'&&!(project.musicBlob instanceof Blob))$('musicFile').click();});
 $('cancelGenerationButton').addEventListener('click',()=>{if(activeAbort){activeAbort.abort();$('generationDetail').textContent='正在取消尚未完成的请求，保留已完成的画面。';}});
 $('retrySceneButton').addEventListener('click',()=>retrySceneArt([selectedIndex]));
+$('continueQueueButton').addEventListener('click',()=>{const ids=new Set(project.renderQueue?.scopeSceneIds||[]),missing=project.scenes.map((scene,i)=>!artReady(scene)?i:-1).filter(i=>i>=0),within=missing.filter(i=>ids.has(project.scenes[i].id));retrySceneArt(within.length?within:missing);});
 $('workflowHelpButton').addEventListener('click',()=>openModal('先试两镜，再铺全片','<p class="modal-copy">选择“先生成前 2 镜样片”，先检查风格、文字大小和讲解是否清楚。满意后在时间线按范围补齐其余镜头；其余镜头不会自动提交。也可以只生成分镜，先编辑文案再制作画面。</p><p class="modal-copy">画面出错时，可以继续修复旧代码，也可以保留文案重新设计；需要简化讲解时，再选择“简化本镜文案并重做”。重做范围只包含当前镜头，可撤销。</p><p class="modal-copy">“真实关键帧”来自本页实际渲染，可点击放大。机器检查能发现重叠、越界和部分运动问题，仍需你判断画面是否好看、知识是否讲清。AI 视频和配音按需单独提交，费用以服务商账单为准。</p>','CREATION WORKFLOW'));
 $('redesignSceneButton').addEventListener('click',()=>retrySceneArt([selectedIndex],{fresh:true}));
 $('rewriteSceneButton').addEventListener('click',()=>{
@@ -1226,7 +1244,7 @@ $('muteButton').addEventListener('click', () => { muted = !muted; $('muteButton'
 $('fullscreenButton').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else $('previewStage').requestFullscreen?.().catch(() => toast('浏览器未允许全屏预览')); });
 all('[data-mode]').forEach((button) => button.addEventListener('click', () => {if(busy)return toast('当前任务执行中，请稍后切换制作方式。');setMode(button.dataset.mode);project.mode=selectedMode;markChanged();if(!project.isDemo){$('generationPanel').hidden=false;finishGeneration('制作方式已切换');}}));
 all('[data-ratio]').forEach((button) => button.addEventListener('click', () => { if (busy) return toast('当前任务执行中，请稍后调整画幅。'); selectedRatio = button.dataset.ratio; all('[data-ratio]').forEach((b) => b.classList.toggle('selected', b === button)); project.ratio = selectedRatio; markChanged(); }));
-all('[data-style]').forEach((button) => button.addEventListener('click', () => { if (busy) return toast('当前任务执行中，请稍后调整风格。'); selectedStyle = normalizeStyle(button.dataset.style); all('[data-style]').forEach((b) => b.classList.toggle('selected', b === button)); project.style = selectedStyle; $('styleDescription').textContent=getStyle(selectedStyle).description;markChanged(); }));
+all('[data-style]').forEach((button) => button.addEventListener('click', () => { if (busy) return toast('当前任务执行中，请稍后调整风格。'); selectedStyle = normalizeStyle(button.dataset.style); all('[data-style]').forEach((b) => b.classList.toggle('selected', b === button)); project.style = selectedStyle;project.visualBible=visualBible(null,selectedStyle); $('styleDescription').textContent=getStyle(selectedStyle).description;markChanged(); }));
 for (const [id, setting] of [['voiceToggle', 'voice'], ['musicToggle', 'music'], ['captionsToggle', 'captions']]) $(id).addEventListener('change', () => { project.settings[setting] = $(id).checked; renderNeeded = true; saveLocal(); if (setting !== 'captions') refreshPlayingAudio(); if (setting === 'voice' && $(id).checked && !(project.voiceClips || []).length && !project.voiceBlob) toast('旁白已启用，生成配音后可播放和导出。'); });
 $('modeHelp').addEventListener('click', showModes);
 $('topicExamples').addEventListener('click', showLibrary);
@@ -1254,7 +1272,7 @@ $('sceneDuration').addEventListener('change', () => {
   pushUndo(); getScene().duration = duration; reflow(); alignMedia(); currentTime = Math.min(currentTime, project.duration); markChanged(); toast('已调整镜头时长，后续镜头起点同步移动。');
 });
 $('splitButton').addEventListener('click', splitScene);
-$('undoButton').addEventListener('click', () => { if (busy) return toast('请等当前任务完成后再撤销。'); const saved = undoStack.pop(); if (!saved) return; pause(); project = saved.project; selectedIndex = saved.selectedIndex; currentTime = saved.currentTime; hasGenerated = project.generatedFromApi === true; releaseClipURL(); markChanged(); toast('已恢复上一版本'); });
+$('undoButton').addEventListener('click', () => { if (busy) return toast('请等当前任务完成后再撤销。'); const saved = undoStack.pop(); if (!saved) return; pause(); project = saved.project;activateProjectAccounting(); selectedIndex = saved.selectedIndex; currentTime = saved.currentTime; hasGenerated = project.generatedFromApi === true; releaseClipURL(); markChanged(); toast('已恢复上一版本'); });
 all('[data-inspector]').forEach((button) => button.addEventListener('click', () => { all('[data-inspector]').forEach((b) => b.classList.toggle('active', b === button)); $('sceneInspector').hidden = button.dataset.inspector !== 'scene'; $('rulesInspector').hidden = button.dataset.inspector !== 'rules'; }));
 $('navSkills').addEventListener('click', () => { document.querySelector('[data-inspector="rules"]').click(); document.querySelector('.inspector-panel')?.scrollIntoView({ behavior: 'smooth' }); });
 $('exportSkillButton').addEventListener('click', exportSkill);
@@ -1281,7 +1299,7 @@ $('projectFile').addEventListener('change', async (event) => {
     quarantineInvalidPrograms(imported);
     if(!validProject(imported))throw new Error('项目结构不完整或时长超出范围，原项目已保留。');
     for(const key of ['voiceBlob','voiceClips','videoClips','musicBlob','musicAnalysis','apiKey','apiConfig','config'])delete imported[key];
-    pause();pushUndo();project=imported;recoverRenderStates(project);project.settings=Object.assign({voice:true,music:true,captions:true},project.settings||{});selectedIndex=0;currentTime=0;selectedRatio=normalizeRatio(project.ratio);selectedStyle=normalizeStyle(project.style);selectedMode=project.mode||'code';hasGenerated=project.generatedFromApi===true;releaseClipURL();syncForm();lastScriptFailure=null;$('scriptFailureActions').hidden=true;markChanged();
+    pause();pushUndo();project=imported;activateProjectAccounting();recoverRenderStates(project);project.settings=Object.assign({voice:true,music:true,captions:true},project.settings||{});selectedIndex=0;currentTime=0;selectedRatio=normalizeRatio(project.ratio);selectedStyle=normalizeStyle(project.style);selectedMode=project.mode||'code';hasGenerated=project.generatedFromApi===true;releaseClipURL();syncForm();lastScriptFailure=null;$('scriptFailureActions').hidden=true;markChanged();
     if(restored){
       setGenerationProgress({stage:'分镜已恢复，等待制作画面',total:project.scenes.length,completed:0,measurable:true,newRun:true,detail:'已读取原有模型返回内容，恢复过程未调用付费模型。'});
       finishGeneration(`已恢复 ${project.scenes.length} 个分镜`);
@@ -1311,9 +1329,9 @@ $('clipPreview').addEventListener('seeked', () => { renderNeeded = true; });
 $('topicInput').addEventListener('input', () => { $('topicHint').textContent = '按主题生成 · 需要文本 API'; });
 document.addEventListener('keydown', (event) => { const editable = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName); if (event.code === 'Space' && !editable && !$('modal').open) { event.preventDefault(); togglePlay(); } if (event.key === 'ArrowRight' && !editable && !$('modal').open) { event.preventDefault(); seek(currentTime + 5); } if (event.key === 'ArrowLeft' && !editable && !$('modal').open) { event.preventDefault(); seek(currentTime - 5); } });
 window.addEventListener('beforeunload', (event) => {
-  saveLocal();
+  saveLocal();usageLedger.persist();
   if (busy || project.voiceBlob || project.musicBlob || (project.voiceClips || []).length || (project.videoClips || []).length) { event.preventDefault(); event.returnValue = ''; }
 });
-usageLedger.subscribe(refreshUsage);refreshUsage();initializeAppearance();syncForm(); updateProjectUI(); renderRules();if(!project.isDemo&&(missingFrames().length||project.scenes.some(s=>s.videoTask?.id||s.videoError))){$('generationPanel').hidden=false;finishGeneration('项目已保留，可补齐或升级逐镜画面');}requestAnimationFrame(animate);
+activateProjectAccounting();usageLedger.subscribe(refreshUsage);refreshUsage();initializeAppearance();syncForm(); updateProjectUI(); renderRules();if(!project.isDemo&&(missingFrames().length||usageLedger.elapsedMs()>0||project.scenes.some(s=>s.videoTask?.id||s.videoError))){$('generationPanel').hidden=false;finishGeneration('项目已保留，可补齐或升级逐镜画面');}requestAnimationFrame(animate);
 
 const entryPanel=new URLSearchParams(location.search).get("panel");if(entryPanel==="library")showLibrary();else if(entryPanel==="about")$("navAbout").click();

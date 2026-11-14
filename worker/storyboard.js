@@ -72,7 +72,8 @@ export function normalizeStoryboard(input,{targetDuration=90,topic=''}={}){
     }
   }
   const sources=containers.map(v=>first(v,['sources','references','资料','来源'])).find(Array.isArray)||[];
-  return {object:{title:field(['title','videoTitle','video_title','name','标题','片名','视频标题'])||(scenes?.length?words(topic):''),summary:field(['summary','synopsis','核心结论','概要','摘要']),scenes,sources},normalizations};
+  const visualBible=containers.map(v=>first(v,['visualBible','视觉设定'])).find(record);
+  return {object:{title:field(['title','videoTitle','video_title','name','标题','片名','视频标题'])||(scenes?.length?words(topic):''),summary:field(['summary','synopsis','核心结论','概要','摘要']),scenes,sources,visualBible},normalizations};
 }
 
 export function describeStoryboardShape(input){

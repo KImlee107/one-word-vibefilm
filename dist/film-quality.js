@@ -1,4 +1,4 @@
-export const FILM_QUALITY_VERSION=2;
+export const FILM_QUALITY_VERSION=3;
 const area=b=>Math.max(0,b[2])*Math.max(0,b[3]);
 function overlap(a,b){const w=Math.max(0,Math.min(a[0]+a[2],b[0]+b[2])-Math.max(a[0],b[0])),h=Math.max(0,Math.min(a[1]+a[3],b[1]+b[3])-Math.max(a[1],b[1]));return w*h/Math.max(.000001,Math.min(area(a),area(b)));}
 /** Measurable layout checks; semantic and aesthetic review remains a model task. */
@@ -9,6 +9,10 @@ export function auditFilmSamples(samples,{width,height,allowTextMotion=false}={}
     if(phase<.15||phase>.85)continue; // entrance/exit frames may intentionally cross an edge
     const texts=(stats?.texts||[]).filter(t=>t.alpha>.25&&t.text.trim());
     const tiny=texts.filter(t=>t.sizeRatio<.03&&t.text.length>1);
+    const faint=texts.filter(t=>t.alpha>.5&&Number.isFinite(t.contrast)&&t.contrast<2.2);
+    if(faint.length)add('TEXT_CONTRAST','文字与道具/背景对比太低；浅色纸面请用深色字，将标注移到清楚区域，减少泛白辉光。',phase,faint.map(t=>({text:t.text,contrast:+t.contrast.toFixed(2)})));
+    const appearance=stats?.appearance;
+    if(appearance&&((appearance.expectedBackground<.2&&appearance.cornerLuma>.7&&appearance.brightFraction>.72)||(appearance.expectedBackground>.6&&appearance.cornerLuma<.08&&appearance.darkFraction>.8)))add('STYLE_BACKGROUND','该镜长时间反转了全片背景色；请保持所选视觉世界，避免整页白闪或黑闪。',phase,[appearance]);
     if(tiny.length)add('TEXT_SMALL','主要文字过小；请减少标签和向量维数，放大字号，不要继续塞小字。',phase,tiny.map(t=>({text:t.text,sizeRatio:t.sizeRatio})));
     const clipped=texts.filter(t=>t.box[0]<.018||t.box[0]+t.box[2]>.982||t.box[1]<.14||t.box[1]+t.box[3]>.82);
     if(clipped.length)add('TEXT_CLIPPED','文字越过画布安全边距或进入字幕区域；请移动到横向3%–97%、纵向14%–80%。',phase,clipped.map(t=>({text:t.text,box:t.box})));

@@ -2,6 +2,7 @@ import {normalizeVisualValues,visualNumber,visualValueText} from './visual-data.
 /* 见知 · Deterministic knowledge animation engine. No DOM or network needed. */
 import {validateComposition,drawComposition,compositionFingerprint} from './composition.js';
 import {getStyle,normalizeRatio,normalizeStyle,MAX_GENERATION_DURATION,MAX_PROJECT_DURATION} from './presets.js';
+import {visualBible} from './visual-craft.js';
 export const SUPPORTED_TOPICS = [
   { id: 'dice', label: '两个骰子：为什么 7 最容易出现？', keywords: ['骰子', '概率', 'dice'] },
   { id: 'coin', label: '抛硬币：连出正面，下次会怎样？', keywords: ['硬币', 'coin'] },
@@ -102,13 +103,13 @@ export function createProjectFromScript(input, options = {}) {
     for(const warning of dataWarnings)warnings.push(`第 ${index+1} 镜：${warning}`);
     const items = (Array.isArray(v.items) ? v.items : []).slice(0, 8).map(x => typeof x === 'object' && x ? { label: cleanText(x.label ?? x.title ?? x.text, 40), detail: cleanText(x.detail ?? x.description, 80), value:visualNumber(x.value),valueText:visualValueText(x.valueText??x.value??'') } : { label: cleanText(x, 40) });
     const scene = { id: `scene-script-${index + 1}`, title: cleanText(entry.title || `镜头 ${index + 1}`, 64), start, duration: clamp(Number(entry.duration) || 10, 1, 90) / total * duration, narration: cleanText(entry.narration, 1000), caption: cleanText(entry.caption || entry.narration || entry.title, 180), kind: `script:${kind}`, visual: { labels, values, valueNotes, dataWarnings, items, unit: cleanText(v.unit, 16), note: cleanText(v.note, 80), description: cleanText(v.description, 600), action: cleanText(v.action, 400), formula: cleanText(v.formula, 120), emphasis: cleanText(v.emphasis, 100) }, variant: 0, revision: 0, motionSpeed: 1, particleCount: 34, detailLevel: 1,renderState:'pending' };
-    Object.assign(scene.visual,{layout:cleanText(v.layout,100),visualIntent:cleanText(v.visualIntent,600),heroObjects:(Array.isArray(v.heroObjects)?v.heroObjects:[]).slice(0,12).map(x=>cleanText(x,100)),beats:(Array.isArray(v.beats)?v.beats:[]).slice(0,8).filter(x=>x&&typeof x==='object').map(x=>({at:clamp(Number(x.at)||0,0,1),meaning:cleanText(x.meaning,200),change:cleanText(x.change,400)})),continuity:cleanText(v.continuity,600)});
+    Object.assign(scene.visual,{framing:cleanText(v.framing,100),shotRole:cleanText(v.shotRole,80),layout:cleanText(v.layout,100),visualIntent:cleanText(v.visualIntent,600),heroObjects:(Array.isArray(v.heroObjects)?v.heroObjects:[]).slice(0,12).map(x=>cleanText(x,100)),beats:(Array.isArray(v.beats)?v.beats:[]).slice(0,8).filter(x=>x&&typeof x==='object').map(x=>({at:clamp(Number(x.at)||0,0,1),meaning:cleanText(x.meaning,200),change:cleanText(x.change,400)})),continuity:cleanText(v.continuity,600)});
     if(entry.composition){scene.composition=validateComposition(entry.composition);scene.renderState='complete';scene.compositionFingerprint=compositionFingerprint(scene.composition);}
     start += scene.duration;
     return scene;
   });
   const sources = (Array.isArray(script.sources) ? script.sources : []).slice(0, 16).filter(x => x && typeof x === 'object' && /^https?:\/\//i.test(String(x.url))).map(x => ({ title: cleanText(x.title || x.url, 180), url: cleanText(x.url, 1000) }));
-  return { id: `jz-api-${Date.now().toString(36)}`, title: cleanText(script.title || options.topic || '我的知识短片', 100), topic: cleanText(options.topic || script.title, 300), topicKey: 'custom', summary: cleanText(script.summary, 600), duration, ratio: normalizeRatio(options.ratio), style: normalizeStyle(options.style), mode: options.mode || 'code', scenes, sources, history: [], warnings, settings: { music: true, voice: true, captions: true, ...options.settings } };
+  return { id: `jz-api-${Date.now().toString(36)}`, title: cleanText(script.title || options.topic || '我的知识短片', 100), topic: cleanText(options.topic || script.title, 300), topicKey: 'custom', visualBible:visualBible(script.visualBible,options.style), summary: cleanText(script.summary, 600), duration, ratio: normalizeRatio(options.ratio), style: normalizeStyle(options.style), mode: options.mode || 'code', scenes, sources, history: [], warnings, settings: { music: true, voice: true, captions: true, ...options.settings } };
 }
 
 export function setSceneComposition(project,index,input){

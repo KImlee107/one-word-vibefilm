@@ -2,6 +2,13 @@
 let engineSource='',fontSources=[],active=null,aliasNames=[];
 const cachedFilms=new Map();
 let queue=Promise.resolve();
+function rgb(value){
+  const s=String(value);if(/^#[\da-f]{3}$/i.test(s))return s.slice(1).split('').map(c=>parseInt(c+c,16));
+  if(/^#[\da-f]{6,8}$/i.test(s))return [1,3,5].map(i=>parseInt(s.slice(i,i+2),16));
+  const m=s.match(/^rgba?\(([^)]+)\)$/i);if(m){const c=m[1].split(',').slice(0,3).map(Number);if(c.length===3&&c.every(Number.isFinite))return c;}
+  return null;
+}
+function luminance(color){return color.reduce((sum,c,i)=>{const s=c/255,v=s<=.04045?s/12.92:((s+.055)/1.055)**2.4;return sum+v*[.2126,.7152,.0722][i];},0);}
 async function loadFonts(){
   if(typeof FontFace==='undefined'||!self.fonts)throw new Error('当前浏览器不支持动画字体，请使用最新版 Chrome 或 Edge。');
   for(const [name,bytes]of fontSources){const face=new FontFace(name,bytes);await face.load();self.fonts.add(face);}
@@ -22,7 +29,7 @@ function makeFilm(message){
           const corners=[[left,top],[right,top],[right,bottom],[left,bottom]].map(([px,py])=>[m.a*px+m.c*py+m.e,m.b*px+m.d*py+m.f]);
           const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]);
           const fill=String(ctx.fillStyle),rgba=fill.match(/^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/),colorAlpha=rgba?Number(rgba[1]):/^#[0-9a-f]{8}$/i.test(fill)?parseInt(fill.slice(-2),16)/255:1;
-          trace.texts.push({text:text.slice(0,100),box:[Math.min(...xs)/width,Math.min(...ys)/height,(Math.max(...xs)-Math.min(...xs))/width,(Math.max(...ys)-Math.min(...ys))/height],sizeRatio:size*Math.min(Math.hypot(m.a,m.b),Math.hypot(m.c,m.d))/Math.min(width,height),alpha:ctx.globalAlpha*colorAlpha});
+          trace.texts.push({text:text.slice(0,100),box:[Math.min(...xs)/width,Math.min(...ys)/height,(Math.max(...xs)-Math.min(...xs))/width,(Math.max(...ys)-Math.min(...ys))/height],sizeRatio:size*Math.min(Math.hypot(m.a,m.b),Math.hypot(m.c,m.d))/Math.min(width,height),alpha:ctx.globalAlpha*colorAlpha,ink:rgb(fill)});
         }
         return maxWidth===undefined?fillText(value,x,y):fillText(value,x,y,maxWidth);
       };
@@ -43,9 +50,12 @@ function makeFilm(message){
   catch(error){error.phase='compile';throw error;}
   function freeze(value){if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
   const parameters=freeze({...scene,palette});
-  const film=G.VK.film({dur:Number(scene.renderDuration)||scene.duration,theme:'flat',bloom:.20,grain:.025,draw(fr,t){
-    fr.look.bgo={color:palette.bg};fr.look.bg='flat';draw(fr,t,parameters);
+  const defaultBloom=luminance(rgb(palette.bg)||[0,0,0])>.35 ? .025 : .10;
+  const film=G.VK.film({dur:Number(scene.renderDuration)||scene.duration,theme:'flat',bloom:defaultBloom,grain:.018,draw(fr,t){
+    fr.look.bgo={color:palette.bg};fr.look.bg='flat';fr.look.bloom=defaultBloom;draw(fr,t,parameters);
   }});
+  const originalText=film.fr.text;
+  film.fr.text=function(str,x,y,o={}){return originalText.call(this,str,x,y,{...o,color:o.color||palette.ink});};
   // A reusable typesetter, not a scene template. Long labels must be rewritten
   // rather than silently shrinking facts into unreadable text.
   film.fr.label=function(value,x,y,o={}){
@@ -114,7 +124,15 @@ function makeFilm(message){
     }
     return result;
   };
-  return {output,G,film,trace,source:program.source,key:message.key};
+  return {output,G,film,trace,palette,source:program.source,key:message.key};
+}
+function sampleAppearance(active){
+  const size=96,canvas=new OffscreenCanvas(size,size),ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(active.output,0,0,size,size);const d=ctx.getImageData(0,0,size,size).data,luma=[];let corners=0,totalCorners=0,bright=0,dark=0;
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){const i=y*size+x,v=luminance([d[i*4],d[i*4+1],d[i*4+2]]);luma.push(v);if(v>.75)bright++;if(v<.06)dark++;if((x<10||x>85)&&(y<10||y>85)){corners+=v;totalCorners++;}}
+  for(const text of active.trace.texts){if(!text.ink)continue;const [x,y,w,h]=text.box,rim=[];for(let i=0;i<8;i++){for(const [px,py]of [[x+w*i/7,y-.012],[x+w*i/7,y+h+.012],[x-.012,y+h*i/7],[x+w+.012,y+h*i/7]]){const sx=Math.max(0,Math.min(size-1,Math.round(px*size))),sy=Math.max(0,Math.min(size-1,Math.round(py*size)));rim.push(luma[sy*size+sx]);}}
+    rim.sort((a,b)=>a-b);const bg=rim[Math.floor(rim.length/2)],ink=luminance(text.ink)*text.alpha+bg*(1-text.alpha);text.contrast=(Math.max(ink,bg)+.05)/(Math.min(ink,bg)+.05);delete text.ink;
+  }
+  return {cornerLuma:corners/Math.max(1,totalCorners),expectedBackground:luminance(rgb(active.palette.bg)||[0,0,0]),brightFraction:bright/(size*size),darkFraction:dark/(size*size)};
 }
 function sampleForeground(film,geometry=false){
   // Include solid objects drawn below the glow layer, exclude moving background/grain.
@@ -135,7 +153,7 @@ async function handle(event){
     active.trace.texts=[];active.trace.active=!!m.inspect;
     active.G.seek(m.time);active.trace.active=false;
     const stats=m.inspect?sampleForeground(active.film):null;
-    if(stats)stats.texts=active.trace.texts;
+    if(stats){stats.appearance=sampleAppearance(active);stats.texts=active.trace.texts;}
     const bitmap=active.output.transferToImageBitmap();
     if(stats){try{active.trace.skipText=true;active.G.seek(m.time);const shapes=sampleForeground(active.film,true);stats.geometrySignature=shapes.signature;stats.geometryCoverage=shapes.coverage;}finally{active.trace.skipText=false;}}
     self.postMessage({id:m.id,bitmap,stats},[bitmap]);

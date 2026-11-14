@@ -3,7 +3,7 @@ export const MAX_GENERATION_DURATION=300;
 export const DURATION_PRESETS=[
   {seconds:15,label:'15 秒 · 知识闪现'}, {seconds:30,label:'30 秒 · 快速解答'},
   {seconds:45,label:'45 秒 · 一个发现'}, {seconds:60,label:'60 秒 · 精简讲解'},
-  {seconds:90,label:'90 秒 · 标准讲解'}, {seconds:120,label:'2 分钟 · 故事推演'},
+  {seconds:90,label:'90 秒 · 标准讲解'}, {seconds:120,label:'2 分钟 · 故事推演'}, {seconds:150,label:'2 分 30 秒 · Vibe 叙事'},
   {seconds:180,label:'3 分钟 · 深入理解'}, {seconds:300,label:'5 分钟 · 完整专题'}
 ];
 export const RATIO_PRESETS=[

@@ -6,21 +6,24 @@ export class VibeAPIError extends Error {
 }
 
 async function request(path, config, payload, { signal, binary = false, method = 'POST' } = {}) {
+  if(signal?.aborted)throw new DOMException('已取消','AbortError');
+  const requestId=usageLedger.startRequest({path,config});
   let response;
   try {
     response = await fetch(path, { method, credentials: 'same-origin', cache: 'no-store', signal, ...(method === 'GET' ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config, payload }) }) });
   } catch (error) {
-    usageLedger.record({path,config,payload,ok:false});
+    usageLedger.record({path,config,payload,ok:false,requestId});
     if (error.name === 'AbortError') throw error;
     throw new VibeAPIError('NETWORK', '无法连接网站 API，请检查网络后重试。');
   }
   if (!response.ok) {
     let data; try { data = await response.json(); } catch { /* A platform login or timeout page is not a successful API result. */ }
-    if(data?.mayBeBillable||response.status>=500)usageLedger.record({path,config,payload,data,ok:false});
+    if(data?.mayBeBillable||response.status>=500)usageLedger.record({path,config,payload,data,ok:false,requestId});else usageLedger.discardRequest(requestId);
     throw new VibeAPIError(data?.error?.code || 'HTTP_ERROR', data?.error?.message || `网站接口返回 HTTP ${response.status}，请确认已登录且后端已部署。`, response.status,data?.recovery||null);
   }
-  if (binary){usageLedger.record({path,config,payload,characters:response.headers.get('X-Vibe-Usage-Characters')});return response.blob();}
-  try {const data=await response.json();usageLedger.record({path,config,payload,data});return data;} catch { throw new VibeAPIError('INVALID_RESPONSE', '网站接口未返回 JSON；请确认后端已部署并已登录。'); }
+  if (binary){usageLedger.record({path,config,payload,characters:response.headers.get('X-Vibe-Usage-Characters'),requestId});return response.blob();}
+  let data;try {data=await response.json();}catch{usageLedger.record({path,config,payload,ok:false,requestId});throw new VibeAPIError('INVALID_RESPONSE', '网站接口未返回 JSON；请确认后端已部署并已登录。');}
+  usageLedger.record({path,config,payload,data,requestId});return data;
 }
 
 export const health = (options = {}) => request('/api/health', null, null, { ...options, method: 'GET' });

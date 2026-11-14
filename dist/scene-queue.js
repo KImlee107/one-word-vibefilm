@@ -44,3 +44,19 @@ export async function runSceneQueue({indices,sceneCount,signal,failureMode='cont
   const done=new Set(outcomes.filter(o=>o.status!=='cancelled').map(o=>o.index));
   return {indices:ordered,outcomes,pending:ordered.filter(i=>!done.has(i)),paused,cancelled:!!signal?.aborted||outcomes.some(o=>o.status==='cancelled')};
 }
+
+/** Finish the ordered scope first, then revisit only its failed local drawings. */
+export async function runScenePasses({maxPasses=2,isComplete=()=>false,onPass=()=>{},...options}){
+  const ordered=orderedSceneIndices(options.indices,options.sceneCount),limit=Math.max(1,Math.min(3,Math.floor(Number(maxPasses)||1)));
+  let pending=ordered,paused=false,cancelled=!!options.signal?.aborted;const latest=new Map(),attempts=[];let passes=0;
+  for(let pass=1;pass<=limit&&pending.length&&!cancelled;pass++){
+    if(options.signal?.aborted){cancelled=true;break;}
+    passes=pass;onPass({pass,maxPasses:limit,indices:[...pending]});
+    const result=await runSceneQueue({...options,indices:pending,onResult:outcome=>{const item={...outcome,pass};latest.set(item.index,item);attempts.push(item);options.onResult?.(item);}});
+    paused=result.paused;cancelled=result.cancelled;
+    if(paused||cancelled)break;
+    pending=ordered.filter(index=>{const item=latest.get(index);return item?.status==='failed'&&!isComplete(index)&&!shouldPauseSceneQueue(item.error,'continue');});
+    if(pending.length&&pass<limit)await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  return {indices:ordered,outcomes:ordered.map(i=>latest.get(i)).filter(Boolean),attempts,passes,pending:ordered.filter(i=>!isComplete(i)),paused,cancelled};
+}

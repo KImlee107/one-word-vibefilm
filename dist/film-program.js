@@ -1,6 +1,7 @@
 import {undefinedFilmIdentifiers} from './film-scope.js';
 export {FILM_ALIAS_NAMES} from './film-scope.js';
 import {parse} from './vendor/acorn.mjs';
+import {shotPlan} from './visual-craft.js';
 
 const forbidden=new Set('window document self globalThis opener fetch XMLHttpRequest WebSocket WebTransport EventSource importScripts Worker SharedWorker ServiceWorker navigator location indexedDB caches localStorage sessionStorage postMessage close eval Function Reflect Proxy Date performance setTimeout setInterval requestAnimationFrame cancelAnimationFrame Atomics SharedArrayBuffer WebAssembly crypto console process require module exports Image Audio FontFace OffscreenCanvas'.split(' '));
 const properties=new Set(['constructor','prototype','__proto__','caller','callee','arguments','canvas','film','ownerDocument','defaultView','getContext','transferToImageBitmap','convertToBlob','toDataURL','getImageData','putImageData','createImageData']);
@@ -45,7 +46,7 @@ function programAST(source){
       const key=node.computed&&node.property.type==='Literal'?node.property.value:!node.computed?node.property.name:null;
       if(typeof key==='string'&&properties.has(key))throw new Error('动画不能访问绘图环境之外的对象。');
       if(node.object.type==='Identifier'&&node.object.name==='Math'&&key==='random')throw new Error('请使用 VK.hash/VK.rng 保证跳转与导出一致。');
-      if(node.object.type==='Identifier'&&node.object.name==='fr'&&['text','label','rect','circle','ellipse','path','line','poly','arc','chars','g','layer'].includes(key))draws++;
+      if(node.object.type==='Identifier'&&node.object.name==='fr'&&['text','label','rect','circle','ellipse','path','line','poly','arc','chars','g','layer','die','fraction','equation','probabilityBar'].includes(key))draws++;
       if(node.object.type==='MemberExpression'&&node.object.object.name==='fr'&&node.object.property.name==='x')draws++;
     }
     for(const [key,value]of Object.entries(node)){if(['start','end','loc'].includes(key))continue;if(Array.isArray(value))value.forEach(child=>walk(child,node,key));else if(value&&typeof value==='object')walk(value,node,key);}
@@ -62,6 +63,7 @@ export function validateFilmProgram(input){
   programAST(input.source);
   const clean=(value,max)=>typeof value==='string'?value.trim().slice(0,max):'';
   const program={version:1,source:input.source,designIntent:clean(input.designIntent,1200),layout:clean(input.layout,160),heroObjects:(Array.isArray(input.heroObjects)?input.heroObjects:[]).slice(0,12).map(x=>clean(x,160))};
+  const plan=shotPlan(input.shotPlan);if(plan)program.shotPlan=plan;
   if(!program.designIntent||!program.layout||!program.heroObjects.length)throw new Error('动画缺少具体物件和知识动作说明。');
   return program;
 }

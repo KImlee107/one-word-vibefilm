@@ -54,7 +54,7 @@
   </aside>
   <div class="app-shell">
     <header class="topbar">
-      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.9.0</span></div>
+      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v1.0.0</span></div>
       <div class="topbar-actions">
         <span class="save-state" id="saveState"><span></span>已保存到本机</span>
         <label class="ui-font-control" for="uiFontSize"><span>界面字号</span><select id="uiFontSize" aria-label="界面字号"><option value="18">18px</option><option value="20">20px</option><option value="22">22px</option></select></label>
@@ -79,7 +79,7 @@
         <div class="generation-details" id="generationFailureTools" hidden><span>仅显示本次任务的镜头错误；历史原因保留在各镜详情中。</span><button class="text-button" id="clearGenerationFailures" type="button">清空本次提示</button></div>
         <div class="generation-failures" id="generationFailures" hidden aria-label="本次任务未完成镜头及原因"></div>
         <div class="generation-next" id="scriptFailureActions" hidden><p>此次生成已停止。可下载本次返回内容，查看缺失字段或其他格式问题。</p><div><button class="button secondary" id="downloadScriptFailure" type="button">下载本次返回内容</button><button class="button secondary" id="continueSavedStoryboard" type="button" hidden>继续已有分镜</button></div></div>
-        <div class="generation-next" id="generationNext" hidden><p id="generationNextText"></p><div><button class="button secondary" id="resumeArtButton" type="button">补齐未完成画面</button><button class="button secondary" id="resumeVideoTasksButton" type="button" hidden>只取回已提交 AI 结果</button><button class="button primary" id="batchAIButton" type="button">选择并生成 AI 镜头</button></div></div>
+        <div class="generation-next" id="generationNext" hidden><p id="generationNextText"></p><div><button class="button primary" id="continueQueueButton" type="button">继续未完成镜头 · 保留累计统计</button><button class="button secondary" id="resumeArtButton" type="button">补齐未完成画面</button><button class="button secondary" id="resumeVideoTasksButton" type="button" hidden>只取回已提交 AI 结果</button><button class="button primary" id="batchAIButton" type="button">选择并生成 AI 镜头</button></div></div>
       </section>
       <section class="editor-layout">
         <aside class="panel create-panel">
@@ -104,6 +104,7 @@
             </div>
             <div class="field-title"><span>视觉风格</span><span class="muted">统一整片质感</span></div>
             <div class="style-grid expanded-styles" id="stylePresets" role="group" aria-label="视觉风格"></div><p class="style-description" id="styleDescription"></p>
+            <details class="visual-bible"><summary>全片视觉设定 · 参考片精修</summary><p id="visualBibleText"></p><small>统一物件、材质与光源；每镜仍根据知识重新设计，真实帧检查文字对比与泛白问题。</small></details>
             <div class="skill-status"><span class="status-dot"></span><a href="https://github.com/HeyChengC/vibe-knowledge-film" target="_blank" rel="noopener noreferrer">vibe-knowledge-film 已接入 ↗</a><small>现写代码 · 实际渲染 · 看图返修</small></div>
             <label class="field-label" for="reviewRoundsSelect">视觉返修轮数</label><select id="reviewRoundsSelect"><option value="2" selected>2 轮 · 推荐质量</option><option value="1">1 轮 · 减少调用</option><option value="0">仅代码与静帧检查 · 费用较低</option></select><p class="review-note">每镜 1 次代码生成 + 所选轮数的看图返修。代码 / 返回格式 / 排版问题合计最多追加 1 次文本模型修复，仍失败按所选策略继续或暂停，并保留代码；分镜格式整理也最多追加 1 次请求。实际阶段与完成数会显示在进度条中。</p>
             <div class="workflow-options"><button class="text-button" id="workflowHelpButton" type="button">先做样片，再铺全片 ↗</button>
@@ -111,6 +112,7 @@
               <label class="brief-reuse"><input type="checkbox" id="beatSyncToggle" checked>更多分镜，切换尽量跟随音乐拍点</label><p class="review-note" id="rhythmPlanHint"></p><button class="text-button" id="viewRhythmPlanButton" type="button">查看拍点与切换计划 ↗</button>
               <label class="field-label" for="creationWorkflow">生成流程</label><select id="creationWorkflow"><option value="all">分镜后生成全部画面</option><option value="pilot">先生成前 2 镜样片 · 推荐</option><option value="storyboard">只生成分镜，画面按范围制作</option></select>
               <label class="field-label" for="sceneRecoveryPolicy">画面仍报错时</label><select id="sceneRecoveryPolicy"><option value="redesign">保留文案，重设计 1 次</option><option value="rewrite">简化本镜文案，再重设计 1 次</option><option value="stop">保留诊断，手动处理</option></select>
+              <label class="field-label" for="autoPassesSelect">整轮结束后补做</label><select id="autoPassesSelect"><option value="2" selected>最多 2 轮 · 只补失败镜头</option><option value="3">最多 3 轮 · 增加补做机会</option><option value="1">仅本轮 · 结束后手动继续</option></select><p class="review-note">一轮处理完再补失败镜头，成功镜头不重做。每轮都可能产生模型费用；暂停、续跑保留本项目累计用时和费用，暂停时间不计入生成用时。</p>
               <p class="review-note">正常修复仍最多 1 次。重设计最多再增加 1 次文本请求；改写后重做最多增加 2 次。新稿再做本地验收，不循环重试。余额、鉴权、网络问题直接暂停。</p>
             </div>
             <div class="audio-settings">

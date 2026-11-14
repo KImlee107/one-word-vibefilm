@@ -38,18 +38,55 @@ export function formatCost(value){
   return symbol+value.low.toFixed(digits)+(Math.abs(value.high-value.low)>.000001?'–'+value.high.toFixed(digits):'');
 }
 export class UsageLedger{
-  constructor(){this.sessions=[];this.listeners=new Set();this.sequence=0;}
+  constructor({storage,now=()=>Date.now()}={}){
+    this.sessions=[];this.listeners=new Set();this.sequence=0;this.now=now;
+    try{this.storage=storage===undefined?globalThis.localStorage:storage;}catch{this.storage=null;}
+    try{const saved=JSON.parse(this.storage?.getItem('jianzhi-project-usage-v2')||'null');this.sequence=Number(saved?.sequence)||0;this.sessions=(saved?.sessions||[]).slice(-20).map(s=>this.cleanSession(s)).filter(Boolean);this.current=this.sessions.find(s=>s.id===saved?.currentId);}catch{}
+  }
+  cleanSession(s){
+    if(!s||typeof s.id!=='string'||!s.id||s.id.length>180||!Array.isArray(s.entries))return null;
+    const entries=s.entries.slice(-5000).map(e=>{
+      if(!e||!['text','video','speech'].includes(e.type))return null;
+      const item={};for(const k of ['id','type','path','model','host','status','jobId','resolution'])if(typeof e[k]==='string')item[k]=e[k].slice(0,200);
+      for(const k of ['seconds','characters'])if(safeNumber(e[k])!==null)item[k]=Number(e[k]);
+      if(e.tokens&&[e.tokens.input,e.tokens.output,e.tokens.cache].every(v=>safeNumber(v)!==null))item.tokens={input:Number(e.tokens.input),output:Number(e.tokens.output),cache:Number(e.tokens.cache)};
+      if(e.amount&&['CNY','USD'].includes(e.amount.currency)&&[e.amount.low,e.amount.high].every(v=>safeNumber(v)!==null))item.amount={currency:e.amount.currency,low:Number(e.amount.low),high:Number(e.amount.high)};
+      if(e.rate&&['CNY','USD'].includes(e.rate.currency)&&safeNumber(e.rate.unit)!==null)item.rate={currency:e.rate.currency,unit:Number(e.rate.unit)};
+      if(item.status==='requesting')item.status='unconfirmed';
+      return item;
+    }).filter(Boolean);
+    return {id:s.id,label:String(s.label||'项目').slice(0,100),started:Number.isFinite(s.started)&&s.started>=0?s.started:this.now(),elapsedMs:Number.isFinite(s.elapsedMs)&&s.elapsedMs>=0?Math.min(s.elapsedMs,1e12):0,runningSince:null,entries};
+  }
+  persist(){try{this.storage?.setItem('jianzhi-project-usage-v2',JSON.stringify({sequence:this.sequence,currentId:this.current?.id,sessions:this.export()}));this.persistenceError=!this.storage;}catch{this.persistenceError=true;}}
   subscribe(fn){this.listeners.add(fn);return ()=>this.listeners.delete(fn);}
-  notify(){for(const fn of this.listeners)fn(this.summary());}
-  begin(label){this.current={id:++this.sequence,label:String(label).slice(0,100),started:Date.now(),entries:[]};this.sessions.push(this.current);if(this.sessions.length>20)this.sessions.shift();this.notify();}
-  record({path,config,payload={},data={},ok=true,characters}){
+  notify(){this.persist();for(const fn of this.listeners)fn(this.summary());}
+  begin(label,{id}={}){this.pauseClock();this.current={id:id||'job-'+this.now().toString(36)+'-'+(++this.sequence),label:String(label).slice(0,100),started:this.now(),elapsedMs:0,runningSince:null,entries:[]};this.sessions.push(this.current);if(this.sessions.length>20)this.sessions.shift();this.notify();return this.current;}
+  resume(id,label,snapshot){
+    if(this.current?.id!==id)this.pauseClock();
+    const known=this.sessions.find(s=>s.id===id);if(known){this.current=known;this.notify();return known;}
+    const restored=this.cleanSession(snapshot);if(restored&&restored.id===id){this.sessions.push(restored);this.current=restored;this.notify();return restored;}
+    return this.begin(label,{id});
+  }
+  startClock(){if(this.current&&this.current.runningSince===null){this.current.runningSince=this.now();this.persist();}}
+  elapsedMs(session=this.current){return session?(Number(session.elapsedMs)||0)+(session.runningSince===null||session.runningSince===undefined?0:Math.max(0,this.now()-session.runningSince)):0;}
+  pauseClock(){if(this.current&&this.current.runningSince!==null){this.current.elapsedMs=this.elapsedMs();this.current.runningSince=null;this.persist();}}
+  checkpointClock(){if(!this.lastClockSave||this.now()-this.lastClockSave>=4000){this.lastClockSave=this.now();this.persist();}}
+  snapshot(id=this.current?.id){return this.export().find(s=>s.id===id)||null;}
+  requestType(path){return path==='/api/video/create'?'video':path==='/api/speech'?'speech':/^\/api\/(script(?:\/repair)?|scene-code(?:\/repair)?|review-scene|scene-art|revise|video\/prompt)$/.test(path)?'text':null;}
+  startRequest({path,config}){
+    const type=this.requestType(path);if(!type)return null;if(!this.current)this.begin('模型调用');
+    const entry={id:'call-'+this.now().toString(36)+'-'+(++this.sequence),type,path,model:String(config?.model||'').slice(0,160),host:host(config),status:'requesting',amount:null};this.current.entries.push(entry);this.notify();return entry.id;
+  }
+  discardRequest(id){if(!id)return;for(const s of this.sessions)s.entries=s.entries.filter(e=>e.id!==id);this.notify();}
+  record({path,config,payload={},data={},ok=true,characters,requestId}){
     if(path==='/api/video/status'){
       const entry=this.sessions.flatMap(s=>s.entries).find(e=>e.jobId===data.job?.id);if(entry){entry.status=data.job.status;if(Number.isFinite(data.job.outputSeconds)&&data.job.outputSeconds>0&&entry.rate){entry.seconds=data.job.outputSeconds;entry.amount=amount(entry.rate,entry.seconds*entry.rate.unit);}this.notify();}return;
     }
-    const type=path==='/api/video/create'?'video':path==='/api/speech'?'speech':/^\/api\/(script(?:\/repair)?|scene-code(?:\/repair)?|review-scene|scene-art|revise|video\/prompt)$/.test(path)?'text':null;
+    const type=this.requestType(path);
     if(!type)return;
     if(!this.current)this.begin('模型调用');
-    const entry={type,path,model:String(config?.model||'').slice(0,160),host:host(config),status:ok?'completed':'unconfirmed',amount:null};
+    const existing=requestId&&this.sessions.flatMap(s=>s.entries).find(e=>e.id===requestId);
+    const entry=existing||{id:requestId||'call-'+this.now().toString(36)+'-'+(++this.sequence),type,path,model:String(config?.model||'').slice(0,160),host:host(config)};Object.assign(entry,{status:ok?'completed':'unconfirmed',amount:null});
     const rate=priceFor(config,type,payload.resolution||'768P');
     if(type==='text'){
       entry.tokens=tokenUsage(data.usage||data.recovery?.usage);
@@ -60,13 +97,13 @@ export class UsageLedger{
       entry.jobId=data.job?.id||null;entry.seconds=Number(payload.duration)||0;entry.resolution=payload.resolution||'768P';entry.status=ok?(data.job?.status||'queued'):'unconfirmed';
       if(ok){entry.amount=estimateVideoCost(config,entry.seconds,entry.resolution);entry.rate=rate;}
     }
-    if(this.current.entries.length<1000)this.current.entries.push(entry);this.notify();
+    if(!existing&&this.current.entries.length<5000)this.current.entries.push(entry);this.notify();
   }
   summary(){
     const entries=this.current?.entries||[],settled={},pending={};let unknown=0;
     for(const e of entries){if(!e.amount){unknown++;continue;}const target=e.status==='completed'?settled:pending,k=e.amount.currency;target[k]||={currency:k,low:0,high:0};target[k].low+=e.amount.low;target[k].high+=e.amount.high;}
     return {label:this.current?.label||'',calls:entries.length,settled:Object.values(settled),pending:Object.values(pending),unknown,entries};
   }
-  export(){return this.sessions.map(s=>({label:s.label,started:s.started,entries:s.entries}));}
+  export(){return this.sessions.map(s=>{const clean=this.cleanSession({...s,elapsedMs:this.elapsedMs(s)});delete clean.runningSince;return clean;});}
 }
 export const usageLedger=new UsageLedger();

@@ -6,6 +6,7 @@ import {recoverSceneClosures} from './storyboard-json.js';
 import {preserveSceneFacts} from '../dist/scene-recovery.js';
 import {buildRhythmPlan} from '../dist/rhythm.js';
 import {DEFAULT_MUSIC} from '../dist/music/we-never-profile.js';
+import {visualBible,shotPlan,REFINED_DIRECTION} from '../dist/visual-craft.js';
 import {validateFilmProgram,filmFingerprint,extractFilmProgram} from '../dist/film-program.js';
 import {FILM_METHOD,SCENE_CODE_PROMPT,SCENE_REVIEW_PROMPT,SCENE_REPAIR_PROMPT,PORTRAIT_DIRECTION} from './film-prompts.js';
 /** Same-origin API adapters. Keys are request-scoped and never persisted. */
@@ -155,7 +156,7 @@ function cleanVisual(value) {
   const items = (Array.isArray(value.items) ? value.items : []).slice(0, 24).map(x => typeof x === 'string' ? text(x, 120) : isObject(x) ? { label: text(x.label || x.title || x.name, 120), ...(visualNumber(x.value)!==undefined?{value:visualNumber(x.value)}:{}),valueText:visualValueText(x.value??x.valueText??''),description: text(x.description, 220) } : '');
   const heroObjects=(Array.isArray(value.heroObjects)?value.heroObjects:[]).slice(0,12).map(x=>text(x,120));
   const beats=(Array.isArray(value.beats)?value.beats:[]).slice(0,8).filter(isObject).map(x=>({at:Math.max(0,Math.min(1,Number(x.at)||0)),meaning:text(x.meaning,160),change:text(x.change,300)}));
-  return { labels, values, valueNotes, dataWarnings, items, description: text(value.description, 1200), action: text(value.action, 900), unit: text(value.unit, 30), formula: text(value.formula, 160), emphasis: text(value.emphasis, 120),layout:text(value.layout,120),visualIntent:text(value.visualIntent,500),heroObjects,beats,continuity:text(value.continuity,400) };
+  return { labels, values, valueNotes, dataWarnings, items, description: text(value.description, 1200), action: text(value.action, 900), unit: text(value.unit, 30), formula: text(value.formula, 160), emphasis: text(value.emphasis, 120),framing:text(value.framing,100),shotRole:text(value.shotRole,80),layout:text(value.layout,120),visualIntent:text(value.visualIntent,500),heroObjects,beats,continuity:text(value.continuity,400) };
 }
 
 export function validateScene(input, index = 0) {
@@ -183,16 +184,16 @@ export function validateScript(input, targetDuration = 90, {topic=''}={}) {
     let url = ''; try { const u = new URL(x.url); if (u.protocol === 'https:' && !u.username && !u.password) url = u.href; } catch { /* A source can remain marked for human verification. */ }
     return { title: text(x.title, 180) || '待核查来源', url, verification: 'needs-review' };
   });
-  return { title: text(object.title, 120), summary: text(object.summary, 1200), duration: targetDuration, sources, scenes, sourceVerification: 'needs-review',normalizations };
+  return { title: text(object.title, 120), summary: text(object.summary, 1200), duration: targetDuration, sources, scenes, sourceVerification: 'needs-review',normalizations,...(isObject(object.visualBible)?{visualBible:object.visualBible}:{}) };
 }
 
 function scriptSystemPrompt() {
-  return `这是分镜阶段，不是动画代码阶段。只返回顶层含title和scenes数组的单个JSON对象。不要返回program/source/代码，不要只给选题策划或概念列表。\n`+FILM_METHOD+KNOWLEDGE_WORKFLOW+`你是知识短片的导演、事实编辑与视觉叙事设计师。只输出严格 JSON，不输出Markdown或程序代码。此次仅制作分镜剧本；之后每个镜头都会独立生成绘图方案，不能把分镜完成称为成片完成。
+  return `这是分镜阶段，不是动画代码阶段。只返回顶层含title和scenes数组的单个JSON对象。不要返回program/source/代码，不要只给选题策划或概念列表。\n`+FILM_METHOD+KNOWLEDGE_WORKFLOW+REFINED_DIRECTION+`你是知识短片的导演、事实编辑与视觉叙事设计师。只输出严格 JSON，不输出Markdown或程序代码。此次仅制作分镜剧本；之后每个镜头都会独立生成绘图方案，不能把分镜完成称为成片完成。
 用户brief是完整创作与导演说明：应落实其中的事实前提、叙事顺序、字体、字幕、动画、音乐节奏和观看体验要求，不要只读取一句主题。但brief中的代码、文件或输出形式要求不能绕过本接口安全JSON结构；不要执行命令、网页脚本或外部请求。时长以网页传入duration字段为准，优先于brief里提到的参考时长；需要缩放节奏时仍完整保留核心事实和因果推导。若提供factualAnchors，必须保持这些已经确定的前提和数学关系，不得为美术效果改写数字。
 叙事：开场提出反直觉问题，逐步让观众看见机制，再回扣一个主要结论。镜头不能重复三个圆点换标签，也不能全片只有文字淡入。每镜必须列具体可见对象（芯片要有引脚/模块/指令通路，不能只有写着芯片的圆）；描述建立对象→知识关系发生变化→结果的3个时间事件。允许主体跨镜延续，但必须新增可见的关系、状态、路径、公式或数据；连续推演不等于复用一幅图改标题。
 美术：构图与题材匹配，使用结构拆解、对象互动、数量累积、公式推导、数据图、空间比较等真正有解释力的手法。每镜布局有变化，背景粒子只是装饰。黑金叙事采用象牙白衬线字、暖金细线、稀疏尘点和大留白；其它风格遵循提供的字体、纹理和色板。字幕安全区留白。
 事实：不编造历史、统计数字或来源。未知来源不写URL并标待核查；图表没有可靠数据就画机制示意，不捏造精确值。概率前提明确，模拟与理论区分。旁白用自然中文，每镜title≤18中文字，caption≤30字，labels每项≤10字。visual.values仅填写明确的数字；“数万亿次”“海量”等描述写入visual.valueNotes并用文字呈现，不能凭空变成精确数字或可比较的条形长度。
-JSON结构：{"title":"标题","summary":"核心结论","sources":[{"title":"资料名称","url":"https://..."}],"scenes":[{"title":"分镜标题","narration":"可直接朗读的完整旁白","caption":"字幕提示","duration":10,"kind":"process","visual":{"layout":"该镜独立构图","visualIntent":"观众通过什么运动理解什么","heroObjects":["具体外形的主角一","具体外形的主角二"],"beats":[{"at":0,"meaning":"建立","change":"先出现什么"},{"at":0.35,"meaning":"变化","change":"哪个对象如何移动/分解/生长"},{"at":0.75,"meaning":"结果","change":"如何显示推演结果"}],"continuity":"与前后镜头怎样衔接","labels":["短标签"],"values":[],"valueNotes":[],"items":[],"description":"完整画面对象与空间关系","action":"随时间实际发生的知识变化","formula":"可选公式","emphasis":"重点"}}]}。
+JSON结构：{"title":"标题","summary":"核心结论","visualBible":{"world":"统一视觉世界","heroDesign":"贯穿道具的结构与比例","materials":"最多两种主要材质","lighting":"固定主光与阴影","lineLanguage":"主轮廓和辅助线层级","typeHierarchy":"标题数字标签字号关系","continuity":"跨镜物件与视角衔接"},"sources":[{"title":"资料名称","url":"https://..."}],"scenes":[{"title":"分镜标题","narration":"可直接朗读的完整旁白","caption":"字幕提示","duration":10,"kind":"process","visual":{"layout":"该镜独立构图","visualIntent":"观众通过什么运动理解什么","heroObjects":["具体外形的主角一","具体外形的主角二"],"beats":[{"at":0,"meaning":"建立","change":"先出现什么"},{"at":0.35,"meaning":"变化","change":"哪个对象如何移动/分解/生长"},{"at":0.75,"meaning":"结果","change":"如何显示推演结果"}],"continuity":"与前后镜头怎样衔接","labels":["短标签"],"values":[],"valueNotes":[],"items":[],"description":"完整画面对象与空间关系","action":"随时间实际发生的知识变化","formula":"可选公式","emphasis":"重点"}}]}。
 kind仅为内容分类，可用process,compare,bars,network,timeline,orbit,particles,dice,combinations,distribution，不能以kind替代具体画面。所有镜头duration之和严格等于目标时长。若用户提供rhythmPlan，镜头数和每镜时长优先按该实测音乐计划，以下舒缓流程建议不适用。仅在没有rhythmPlan时，镜头数量随时长：15秒约3镜，30秒4–5镜，60秒6–8镜，90秒8–12镜，120秒10–14镜，180秒14–20镜，300秒22–30镜，最多48镜。不要用同一固定镜头数生成所有时长。\n输出前逐项检查：顶层title为字符串；scenes为3–48项数组；每项title、narration是非空字符串，duration为秒数，kind为枚举值，visual为对象。特别检查visual对象结束后还需闭合scene对象：相邻镜头分隔必须是两个右花括号再逗号，即 }} , {；最后一镜也是先闭合visual和scene再闭合scenes数组，不能漏掉外层花括号。即使用户要求只要成片，本阶段仍必须返回完整分镜数组，不能用任务确认、代码或方案摘要代替。`;
 }
 
@@ -350,7 +351,7 @@ async function binaryResponse(response, contentType) {
 
 async function routeAPI(request, env, fetcher) {
   const path = new URL(request.url).pathname;
-  if (request.method === 'GET' && path === '/api/health') return json({ ok: true, version: '0.9.0', skill:{name:'vibe-knowledge-film',commit:'62d51508aad00003dc6209afa80c4b5dc540de59'}, capabilities: ['script', 'script-restore', 'script-repair', 'scene-code','scene-code-repair','review-scene', 'scene-art', 'revise', 'speech', 'speech-minimax', 'video-minimax-h3','h3-prompt', 'video-dashscope', 'video-compatible'], credentials: 'request-only', externalCall: false });
+  if (request.method === 'GET' && path === '/api/health') return json({ ok: true, version: '1.0.0', skill:{name:'vibe-knowledge-film',commit:'62d51508aad00003dc6209afa80c4b5dc540de59'}, capabilities: ['script', 'script-restore', 'script-repair', 'scene-code','scene-code-repair','review-scene', 'scene-art', 'revise', 'speech', 'speech-minimax', 'video-minimax-h3','h3-prompt', 'video-dashscope', 'video-compatible'], credentials: 'request-only', externalCall: false });
   if (request.method !== 'POST') fail('METHOD_NOT_ALLOWED', '此接口仅接受 POST JSON 请求。', 405);
   const origin = request.headers.get('Origin');
   if (origin && origin !== new URL(request.url).origin) fail('ORIGIN_NOT_ALLOWED', '请从网站本身发起生成请求。', 403);
@@ -412,7 +413,7 @@ async function routeAPI(request, env, fetcher) {
     const music=payload.musicSource==='custom'?(isObject(payload.musicAnalysis)?payload.musicAnalysis:null):payload.musicSource==='original'?{duration,bpm:60/originalPeriod,confidence:1,reliable:true,method:'known-original-score',beats:Array.from({length:Math.ceil(duration/originalPeriod)},(_,i)=>+(i*originalPeriod).toFixed(3)),sections:[]}:DEFAULT_MUSIC.analysis;
     const rhythmPlan=rhythmEnabled?buildRhythmPlan(duration,music):null;
     const user = { topic, brief,factualAnchors:briefFacts(topic,brief),audience: text(payload.audience, 300) || '普通成年人', duration,durationPriority:'网页duration字段优先于brief中的参考时长', ratio: normalizeRatio(payload.ratio), style:styleId,styleGuide:{name:style.label,description:style.description,fontFamily:style.fontFamily,texture:style.texture,palette:style.palette},suggestedSceneCount:Math.max(3,Math.ceil(duration/11)), preferences: text(Array.isArray(payload.preferences) ? payload.preferences.map(x => text(x, 300)).join('\n') : payload.preferences, 1800) };
-    if(rhythmPlan){user.suggestedSceneCount=rhythmPlan.sceneCount;user.rhythmPlan=rhythmPlan;user.rhythmInstructions='镜头数优先按rhythmPlan，至少'+Math.max(3,Math.floor(rhythmPlan.sceneCount*.75))+'镜，最多48镜。一个镜头一个明确变化，不拆成重复标题卡。每镜旁白不超过分配秒数约4字/秒。title≤12字、description和action各≤40字、beats各≤12字，避免重复描述。不得为卡点改写事实或缩成看不懂的碎片。';}
+    if(rhythmPlan){user.suggestedSceneCount=rhythmPlan.sceneCount;user.rhythmPlan=rhythmPlan;user.rhythmInstructions='镜头数优先按rhythmPlan，至少'+Math.max(3,Math.floor(rhythmPlan.sceneCount*.75))+'镜，最多48镜。一个镜头一个明确变化，不拆成重复标题卡。允许按内容调整各镜时长：建立场景约3–5秒，核心推演约7–12秒，结论约2–4秒；最终在各镜原意和阅读停顿基础上就近卡点，不把所有镜头机械定为4.5秒。每镜旁白不超过分配秒数约4字/秒。title≤12字、description和action各≤40字、beats各≤12字，避免重复描述。不得为卡点改写事实或缩成看不懂的碎片。';}
     const repairing=path==='/api/script/repair';
     const draft=text(payload.draft,50000);
     if(repairing&&!draft)fail('REPAIR_REQUIRED','没有可整理的模型返回内容。');
@@ -422,10 +423,10 @@ async function routeAPI(request, env, fetcher) {
     const result=await chat(config,messages,{signal,fetcher,jsonMode:payload.jsonMode!==false,maxTokens:rhythmPlan?Math.min(24000,Math.max(10000,rhythmPlan.sceneCount*600+2000)):duration>180?24000:duration>90?16000:10000,allowTruncated:true});
     try{
       if(result.finishReason==='length')fail('MODEL_TRUNCATED','模型返回达到输出长度上限，分镜尚不完整。',502);
-      const script=validateScript(result.content,duration,{topic});if(brief)script.brief=brief;
+      const script=validateScript(result.content,duration,{topic});if(brief)script.brief=brief;script.visualBible=visualBible(script.visualBible,styleId);
       if(rhythmPlan){
         if(script.scenes.length<Math.max(3,Math.floor(rhythmPlan.sceneCount*.75)))fail('SCRIPT_FORMAT',`当前卡点计划需要约 ${rhythmPlan.sceneCount} 镜，模型仅返回 ${script.scenes.length} 镜，尚不足以展开推演。请补充具体过程镜头，不要复制标题卡。`,502);
-        const actual=buildRhythmPlan(duration,music,{count:script.scenes.length});script.scenes.forEach((s,i)=>{s.duration=actual.shots[i].duration;});script.rhythmPlan=actual;
+        const actual=buildRhythmPlan(duration,music,{count:script.scenes.length,preferredDurations:script.scenes.map(s=>s.duration)});script.scenes.forEach((s,i)=>{s.duration=actual.shots[i].duration;});script.rhythmPlan=actual;
       }
       return json({script,usage:result.usage,mayBeBillable:true,repaired:repairing});
     }catch(error){
@@ -460,6 +461,7 @@ async function routeAPI(request, env, fetcher) {
     const brief=text(project.brief,18000);
     const user={scene,index:Number(payload.index)||0,project:{title:text(project.title,160),topic:text(project.topic,2500),summary:text(project.summary,1500),brief,ratio:normalizeRatio(project.ratio),scenes:(Array.isArray(project.scenes)?project.scenes:[]).slice(0,48).map(s=>({title:text(s?.title,100),visual:cleanVisual(s?.visual)}))},styleGuide:style,factualAnchors:briefFacts(project.topic,brief),previousDesigns:previous,preferences:text(payload.preferences,2400)};
     user.layoutContract={ratio:normalizeRatio(project.ratio),contentX:[.06,.94],contentY:[.18,.78],minimumLabelSize:'shortSide * 0.034',primaryLabelSize:'shortSide * 0.044',captions:'application overlay'};
+    user.project.visualBible=visualBible(project.visualBible,project.style);
     if(isObject(payload.recoveryPlan))user.recoveryPlan={mode:text(payload.recoveryPlan.mode,30),reason:text(payload.recoveryPlan.reason,1000),attempt:1,maxAttempts:1,qualityReport:text(JSON.stringify(payload.recoveryPlan.qualityReport||{}),7000),instruction:'旧布局已失败：保留当前事实和时长，重新设计更清楚的分阶段构图，不复刻错误坐标，不输出只改几字的旧画面。'};
     let messages,prompt=SCENE_CODE_PROMPT+PORTRAIT_DIRECTION;
     if(path==='/api/review-scene'){
@@ -473,7 +475,7 @@ async function routeAPI(request, env, fetcher) {
       const draft=text(payload.draft,70000),hasSource=typeof prior.source==='string'&&prior.source.length<=60000&&prior.source.trim();
       if(!hasSource&&!draft)fail('CODE_REQUIRED','没有可修复的镜头代码或原始返回内容。');
       prompt=SCENE_REPAIR_PROMPT+PORTRAIT_DIRECTION+'\n若qualityReport包含文字重叠、字号或越界，请重新分区构图并减少同屏维数；不能仅改标题、换颜色或跳过检查。若draft不是JSON，保留原分镜意图重整为完整program，返回的source必须是可执行函数体。';
-      messages=[{role:'system',content:prompt},{role:'user',content:JSON.stringify({...user,program:hasSource?{version:1,source:prior.source,designIntent:text(prior.designIntent,1200),layout:text(prior.layout,160),heroObjects:(Array.isArray(prior.heroObjects)?prior.heroObjects:[]).slice(0,12)}:null,draft:hasSource?'':draft,issue:text(payload.issue,1400),phase:text(payload.phase,80),qualityReport:text(JSON.stringify(payload.qualityReport||{}),7000)})}];
+      messages=[{role:'system',content:prompt},{role:'user',content:JSON.stringify({...user,program:hasSource?{version:1,source:prior.source,designIntent:text(prior.designIntent,1200),layout:text(prior.layout,160),heroObjects:(Array.isArray(prior.heroObjects)?prior.heroObjects:[]).slice(0,12),shotPlan:shotPlan(prior.shotPlan)}:null,draft:hasSource?'':draft,issue:text(payload.issue,1400),phase:text(payload.phase,80),qualityReport:text(JSON.stringify(payload.qualityReport||{}),7000)})}];
     }else messages=[{role:'system',content:prompt},{role:'user',content:JSON.stringify(user)}];
     const result=await chat(config,messages,{signal,fetcher,maxTokens:18000,allowTruncated:true});
     let parsed,candidate,program;
@@ -484,7 +486,7 @@ async function routeAPI(request, env, fetcher) {
       if(previous.some(p=>p.fingerprint===filmFingerprint(program)))throw Object.assign(new Error('此镜的绘图代码与其它镜头重复，需要重新设计当前机制，不能仅换字。'),{code:'CODE_DUPLICATE'});
     }catch(e){
       const recoverable=isObject(candidate)&&typeof candidate.source==='string'&&candidate.source.length<=60000;
-      const recovery={program:recoverable?{version:1,source:candidate.source.split(config.apiKey).join('[REDACTED]'),designIntent:text(candidate.designIntent,1200),layout:text(candidate.layout,160),heroObjects:(Array.isArray(candidate.heroObjects)?candidate.heroObjects:[]).slice(0,12)}:null,draft:result.content.slice(0,70000).split(config.apiKey).join('[REDACTED]'),phase:'compile',causeCode:e.code||'CODE_FORMAT',feedback:text(parsed?.feedback,1600),usage:result.usage};
+      const recovery={program:recoverable?{version:1,source:candidate.source.split(config.apiKey).join('[REDACTED]'),designIntent:text(candidate.designIntent,1200),layout:text(candidate.layout,160),heroObjects:(Array.isArray(candidate.heroObjects)?candidate.heroObjects:[]).slice(0,12),shotPlan:shotPlan(candidate.shotPlan)}:null,draft:result.content.slice(0,70000).split(config.apiKey).join('[REDACTED]'),phase:'compile',causeCode:e.code||'CODE_FORMAT',feedback:text(parsed?.feedback,1600),usage:result.usage};
       console.warn(JSON.stringify({event:'scene-code-rejected',code:e.code||'CODE_FORMAT',phase:'compile',index:user.index,hasSource:recoverable,finishReason:result.finishReason}));
       return json({error:{code:e.code==='CODE_DUPLICATE'?'CODE_DUPLICATE':'CODE_FORMAT',message:e.message},recovery,mayBeBillable:true},502);
     }

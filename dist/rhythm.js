@@ -22,14 +22,17 @@ export function musicEvents(analysis,start=0,duration=300){
 export function sceneMusicBeats(analysis,start,duration){return musicEvents(analysis,start,duration).map(b=>round(b.time-start));}
 
 /** Content-sized shots, snapped to detected onsets. No fabricated scene content. */
-export function buildRhythmPlan(duration,analysis,{count=recommendedSceneCount(duration)}={}){
+export function buildRhythmPlan(duration,analysis,{count=recommendedSceneCount(duration),preferredDurations}={}){
   duration=Number(duration);count=Number(count);
   if(!Number.isFinite(duration)||duration<15||duration>600||!Number.isInteger(count)||count<3||count>48)throw new Error('卡点计划的时长或镜头数无效。');
   const events=musicEvents(analysis,0,duration),sections=Array.isArray(analysis?.sections)?analysis.sections.slice(0,300).filter(s=>s&&Number.isFinite(s.start)&&Number.isFinite(s.end)):[],steps=Math.ceil(duration*4),weights=[];let total=0;
   for(let i=0;i<steps;i++){const t=musicTimeAt(i*duration/steps,analysis),section=sections.find(s=>t>=s.start&&t<s.end),weight=.7+.3*Math.max(0,Math.min(1,section?.energy??.8));total+=weight;weights.push(total);}
-  const min=Math.max(1.8,Math.min(3,duration/count*.6)),max=Math.max(8,duration/count*1.8),cuts=[0],aligned=[];
+  const preferred=Array.isArray(preferredDurations)&&preferredDurations.length===count&&preferredDurations.every(v=>Number.isFinite(v)&&v>0)?preferredDurations:null;
+  const preferredTotal=preferred?.reduce((s,v)=>s+v,0)||0;let preferredUsed=0;
+  const min=Math.max(1.8,Math.min(3,duration/count*.6)),max=preferred?Math.max(12,...preferred.map(v=>v/preferredTotal*duration*1.3)):Math.max(8,duration/count*1.8),cuts=[0],aligned=[];
   for(let i=1;i<count;i++){
-    const quantile=total*i/count,j=weights.findIndex(v=>v>=quantile),target=j*duration/steps,lo=cuts.at(-1)+min,hi=Math.min(duration-(count-i)*min,cuts.at(-1)+max);
+    const quantile=total*i/count,j=weights.findIndex(v=>v>=quantile);if(preferred)preferredUsed+=preferred[i-1]/preferredTotal*duration;
+    const target=preferred?preferredUsed:j*duration/steps,lo=cuts.at(-1)+min,hi=Math.min(duration-(count-i)*min,cuts.at(-1)+max);
     let best=null;
     for(const e of events){if(e.time<lo||e.time>hi)continue;const score=Math.abs(e.time-target)-e.strength*.16-(e.accent ? .08 : 0);if(!best||score<best.score)best={...e,score};}
     const time=round(best?.time??Math.max(lo,Math.min(hi,target)));cuts.push(time);aligned.push(!!best);
