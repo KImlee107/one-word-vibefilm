@@ -1,0 +1,7 @@
+node_modules/
+.env*
+!.env.example
+worker/assets.generated.js
+dist/server/
+artifacts/
+*.log

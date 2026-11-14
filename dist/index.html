@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f6f5f1">
+  <meta name="description" content="见知 Vibe Studio：用代码动画把知识讲得生动。逐镜预览、局部修改、配乐字幕与视频导出。">
+  <title>见知 · Vibe Studio</title>
+  <link rel="stylesheet" href="./fonts.css">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8L12 3Z"/><path d="m20 2 .5 1.5L22 4l-1.5.5L20 6l-.5-1.5L18 4l1.5-.5L20 2Z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 3h12a3 3 0 0 1 3 3v15H6a3 3 0 0 1-3-3V5a2 2 0 0 1 1-2Zm-1 15a3 3 0 0 1 3-3h13M7 7h7M7 10h5"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/><circle cx="8" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 3h13l3 3v15H4V3Zm4 0v6h8V3M8 21v-8h8v8"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 6-6 4 4 3-3 5 5"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 10 6-10 6L2 9l10-6Zm-10 12 10 6 10-6M2 12l10 6 10-6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 4 12 8-12 8V4Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3v14H7zm7 0h3v14h-3z"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M5 5v14m14-14L7 12l12 7V5Z"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5V4Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="m8 4-5 5 5 5M3 9h10a7 7 0 0 1 0 14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6V4h7l2 3h9v13H3V6Z"/></symbol>
+    <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M3 14v-3a9 9 0 0 1 18 0v3M3 12h4v8H3v-8Zm14 0h4v8h-4v-8Z"/></symbol>
+  </svg>
+  <aside class="rail">
+    <a class="brand" href="./" aria-label="见知首页"><span class="brand-mark">见<span></span></span></a>
+    <div class="rail-items">
+      <button class="rail-button active" id="navStudio" aria-label="创作空间" title="创作空间"><svg><use href="#i-grid"/></svg><span>创作</span></button>
+      <button class="rail-button" id="navLibrary" aria-label="知识选题" title="知识选题"><svg><use href="#i-book"/></svg><span>选题</span></button>
+      <button class="rail-button" id="navSkills" aria-label="我的风格规则" title="我的风格规则"><svg><use href="#i-spark"/></svg><span>偏好</span></button>
+    </div>
+    <div class="rail-bottom">
+      <button class="rail-button" id="navSettings" aria-label="模型服务设置" title="模型服务设置"><svg><use href="#i-settings"/></svg></button>
+      <button class="avatar" id="navAbout" aria-label="关于见知">知</button>
+    </div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span></div>
+      <div class="topbar-actions">
+        <span class="save-state" id="saveState"><span></span>已保存到本机</span>
+        <button class="button quiet" id="importButton"><svg><use href="#i-folder"/></svg><span>打开项目</span></button>
+        <button class="button quiet" id="saveButton"><svg><use href="#i-save"/></svg><span>保存项目</span></button>
+        <button class="button primary" id="exportButton"><svg><use href="#i-download"/></svg><span>导出视频</span></button>
+      </div>
+    </header>
+    <main>
+      <section class="workspace-heading">
+        <div><div class="eyebrow">A LITTLE CURIOSITY. A BIGGER WORLD.</div><h1>让知识，动起来<span>。</span></h1><p>从一个好奇开始，做一条让人想看完的知识短片。</p></div>
+        <button class="sample-link" id="sampleButton"><span class="sample-play">▶</span><span>看看新画面示意<small>参考风格 · 非模型生成结果</small></span><svg><use href="#i-arrow"/></svg></button>
+      </section>
+      <section class="generation-panel" id="generationPanel" hidden aria-live="polite">
+        <div class="generation-heading"><div><span class="generation-kicker">CREATION IN PROGRESS</span><h2 id="generationTitle">正在构思分镜</h2></div><div class="generation-actions"><strong id="generationPercent">等待模型响应</strong><button class="button quiet" id="cancelGenerationButton" type="button">取消当前生成</button></div></div>
+        <div class="generation-bar" id="generationBar" role="progressbar" aria-label="生成进度" aria-valuemin="0" aria-valuemax="100"><span id="generationFill"></span></div>
+        <div class="generation-details"><span id="generationDetail">实际阶段与完成镜头数会显示在这里。</span><span id="generationElapsed">已用时 00:00</span></div>
+        <div class="generation-next" id="generationNext" hidden><p id="generationNextText"></p><div><button class="button secondary" id="resumeArtButton" type="button">补齐未完成画面</button><button class="button primary" id="batchAIButton" type="button">选择并生成 AI 镜头</button></div></div>
+      </section>
+      <section class="editor-layout">
+        <aside class="panel create-panel">
+          <div class="panel-heading"><div><span class="step-number">01</span><h2>创作设定</h2></div><span class="tiny-label">CREATE</span></div>
+          <form id="createForm">
+            <label class="field-label" for="topicInput">你想讲清楚什么？<span>一句话就够</span></label>
+            <textarea id="topicInput" rows="3" maxlength="120" placeholder="例如：为什么两个骰子，7 最容易出现？">为什么两个骰子，7 最容易出现？</textarea>
+            <div class="topic-hint"><span class="status-dot"></span><span id="topicHint">本地模板 · 骰子与概率</span><button type="button" id="topicExamples">换个选题</button></div>
+            <details class="brief-details" id="creativeBriefDetails"><summary>创作说明 / 分镜脚本<span>选填</span></summary><label class="sr-only" for="briefInput">创作说明或分镜脚本</label><textarea id="briefInput" rows="7" maxlength="18000" placeholder="可粘贴导演要求、分镜、视觉物件、镜头节奏和配乐说明。生成时会真正传给模型，不只是展示提示词。"></textarea><p>保留你提供的事实、推演和视觉要求；画面与音乐以实际生成及上传结果为准。</p></details>
+            <div class="creative-tools"><button type="button" class="text-button" id="birthdayBriefButton">套用生日悖论方案 <span>↗</span></button></div>
+            <div class="field-title"><span>画面制作方式</span><button type="button" class="text-button" id="modeHelp">有什么区别？</button></div>
+            <div class="mode-grid" role="group" aria-label="画面制作方式">
+              <button type="button" class="mode-card selected" data-mode="code"><svg><use href="#i-code"/></svg><strong>代码动画</strong><small>准确 · 好修改</small><span class="mode-check">✓</span></button>
+              <button type="button" class="mode-card" data-mode="ai"><svg><use href="#i-image"/></svg><strong>AI 影像</strong><small>场景 · 氛围</small><span class="mode-check">✓</span></button>
+              <button type="button" class="mode-card" data-mode="mixed"><svg><use href="#i-layers"/></svg><strong>混合制作</strong><small>图解 + 影像</small><span class="mode-check">✓</span></button>
+            </div>
+            <div class="mode-description" id="modeDescription">AI 编排分镜，由代码引擎绘制。数字、图形与运动可控。</div>
+            <div class="two-fields">
+              <div><label class="field-label" for="durationSelect">视频时长</label><select id="durationSelect" aria-label="视频时长预设"></select></div>
+              <div><label class="field-label">画面比例</label><select id="ratioSelect" aria-label="画面比例预设"></select></div>
+            </div>
+            <div class="field-title"><span>视觉风格</span><span class="muted">统一整片质感</span></div>
+            <div class="style-grid expanded-styles" id="stylePresets" role="group" aria-label="视觉风格"></div><p class="style-description" id="styleDescription"></p>
+            <div class="skill-status"><span class="status-dot"></span><a href="https://github.com/HeyChengC/vibe-knowledge-film" target="_blank" rel="noopener noreferrer">vibe-knowledge-film 已接入 ↗</a><small>现写代码 · 实际渲染 · 看图返修</small></div>
+            <label class="field-label" for="reviewRoundsSelect">视觉返修轮数</label><select id="reviewRoundsSelect"><option value="2" selected>2 轮 · 推荐质量</option><option value="1">1 轮 · 减少调用</option><option value="0">仅代码与静帧检查 · 费用较低</option></select><p class="review-note">每镜 1 次代码生成 + 所选轮数的看图返修，均调用 DeepSeek。耗时由模型与画面复杂度决定。</p>
+            <div class="audio-settings">
+              <label><span><svg><use href="#i-headphones"/></svg>中文旁白</span><input id="voiceToggle" type="checkbox" checked><i class="switch"></i></label>
+              <label><span>中文字幕</span><input id="captionsToggle" type="checkbox" checked><i class="switch"></i></label>
+              <label><span>配乐与音效</span><input id="musicToggle" type="checkbox" checked><i class="switch"></i></label>
+            </div>
+            <button type="submit" class="button generate-button" id="generateButton"><svg><use href="#i-spark"/></svg><span>生成分镜与代码画面</span><svg><use href="#i-arrow"/></svg></button>
+            <p class="cost-note" id="costNote">DeepSeek V4.1 Flash + MiniMax 已预设<br><button type="button" class="text-button" id="configureAPI">填写 API Key →</button></p>
+          </form>
+        </aside>
+        <section class="preview-column" aria-label="视频预览">
+          <div class="preview-heading"><div><span class="live-dot"></span><h2>实时预览</h2><span class="preview-badge" id="previewBadge">交互示意 · 未生成</span></div><button class="icon-button" id="fullscreenButton" aria-label="全屏预览" title="全屏预览"><svg><use href="#i-expand"/></svg></button></div>
+          <div class="preview-stage" id="previewStage">
+            <div class="stage-grid"></div><span class="stage-label" id="stageLabel">1080 × 1920</span>
+            <div class="canvas-wrap" id="canvasWrap"><canvas id="previewCanvas" width="540" height="960" aria-label="科普动画预览"></canvas><video id="clipPreview" muted playsinline hidden></video><button class="canvas-play" id="canvasPlay" aria-label="播放预览"><svg><use href="#i-play"/></svg></button></div>
+            <div class="stage-footnote"><span>JIANZHI ORIGINAL</span><span id="frameMode">CODE → KNOWLEDGE</span></div>
+          </div>
+          <div class="transport">
+            <button class="icon-button" id="restartButton" aria-label="回到开头"><svg><use href="#i-back"/></svg></button>
+            <button class="play-button" id="playButton" aria-label="播放"><svg><use href="#i-play"/></svg></button>
+            <span class="time-display"><strong id="currentTime">00:00</strong><span>/</span><span id="durationTime">01:30</span></span>
+            <input type="range" id="seekSlider" min="0" max="90" step="0.01" value="0" aria-label="视频进度">
+            <button class="icon-button" id="muteButton" aria-label="静音" aria-pressed="false"><svg><use href="#i-volume"/></svg></button>
+          </div>
+          <div class="preview-note" id="previewNote"><svg><use href="#i-code"/></svg><span>当前为内置示意。点击生成后，每镜现写动画代码并看图返修。</span></div>
+        </section>
+        <aside class="panel inspector-panel">
+          <div class="inspector-tabs"><button class="active" data-inspector="scene">分镜编辑</button><button data-inspector="rules">我的偏好<span id="rulesCount">0</span></button></div>
+          <div id="sceneInspector">
+            <div class="scene-heading"><span class="scene-number" id="sceneNumber">镜头 01</span><span class="scene-range" id="sceneRange">00:00 – 00:12</span></div>
+            <label class="sr-only" for="sceneTitle">镜头标题</label><input class="scene-title" id="sceneTitle" value="一个小小的问题" maxlength="40">
+            <div class="scene-status"><span></span><span id="sceneVersion">原始版本</span><button class="text-button" id="undoButton" disabled><svg><use href="#i-undo"/></svg>撤销修改</button></div>
+            <div class="scene-tools"><label>镜头时长 <input id="sceneDuration" type="number" min="1" max="120" step="0.5"> 秒</label><button id="splitButton" class="text-button">在播放头拆分</button></div>
+            <label class="field-label" for="sceneNarration">旁白与字幕文案</label><textarea id="sceneNarration" rows="4" maxlength="320"></textarea>
+            <button class="text-button apply-copy" id="applyCopyButton">应用文案修改<svg><use href="#i-arrow"/></svg></button>
+            <details class="scene-code-details" id="sceneCodeDetails" hidden><summary>查看本镜代码与返修记录</summary><p id="sceneCodeChecks"></p><pre id="sceneCodeSource"></pre></details>
+            <div class="inspector-divider"></div>
+            <div class="field-title"><span>这一镜，还可以更好</span><svg class="accent-icon"><use href="#i-spark"/></svg></div>
+            <p class="inspector-description">说出你的想法，只调整选中的镜头。</p>
+            <div class="revision-box"><textarea id="revisionInput" rows="3" maxlength="200" placeholder="例如：改成蓝色，让动画慢一点"></textarea><button id="reviseButton" class="revision-send" aria-label="修改选中镜头"><svg><use href="#i-arrow"/></svg></button></div>
+            <div class="suggestion-chips"><button data-revision="节奏慢一点">慢一点</button><button data-revision="改成蓝色">改成蓝色</button><button data-revision="更多粒子">更多粒子</button></div>
+            <label class="remember-rule"><input type="checkbox" id="rememberRule"><span>也保存为我的创作偏好</span><svg><use href="#i-info"/></svg></label>
+            <div class="revision-result" id="revisionResult" role="status" hidden></div>
+            <div class="media-generation"><button class="button secondary full-width" id="retrySceneButton" type="button"><svg><use href="#i-spark"/></svg>重新设计此镜代码画面</button><button class="button secondary full-width" id="sceneVideoButton"><svg><use href="#i-film"/></svg>生成此镜 AI 画面</button><button class="text-button" id="speechButton"><svg><use href="#i-headphones"/></svg>生成 / 补齐旁白</button><label class="text-button upload-music" for="musicFile">上传我的配乐</label><input id="musicFile" type="file" accept="audio/*" hidden><p id="musicAnalysisStatus" class="music-analysis-status">未上传配乐，尚未分析音乐节拍。</p><button class="text-button" id="alignMusicButton" type="button" hidden>将现有代码画面轻度贴合节拍</button><p id="mediaStatus">MiniMax-H3 画面 · speech-2.8-hd 旁白</p></div>
+            <div class="inspector-bottom"><svg><use href="#i-check"/></svg><p>局部修改保留其他镜头<br><span>改动可撤销，不必整片重来</span></p></div>
+          </div>
+          <div id="rulesInspector" hidden><div class="rules-intro"><svg><use href="#i-spark"/></svg><h3>越用，越懂你的风格。</h3><p>只有你确认保存的修改才会成为偏好。可删除，也可导出为 skill。</p></div><div id="rulesList"></div><button class="button secondary full-width" id="exportSkillButton"><svg><use href="#i-download"/></svg>导出我的 Skill</button></div>
+        </aside>
+      </section>
+      <section class="timeline-panel" aria-label="分镜时间线">
+        <div class="timeline-heading"><div><svg><use href="#i-film"/></svg><h2>分镜时间线</h2><span id="sceneCount">8 个镜头</span></div><div><span class="timeline-hint">点击镜头预览 · 选中后局部修改</span><button class="text-button" id="promptButton"><svg><use href="#i-code"/></svg>查看创作提示词</button></div></div>
+        <div class="timeline-track" id="timelineTrack"></div>
+        <div class="timeline-bottom"><span><i></i>原创氛围配乐 · 播放时实时合成</span><span id="projectStatus">当前为交互示意，尚未调用 API</span><button class="text-button" id="sourcesButton">知识来源<svg><use href="#i-arrow"/></svg></button></div>
+      </section>
+      <footer class="page-footer"><span>见知，让每一份好奇都有回响。</span><div><a href="./source.zip" class="license-link" download>下载源码</a><a href="./licenses.html" class="license-link">开源许可</a><button id="aboutButton">关于这个原型 <svg><use href="#i-info"/></svg></button></div></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <dialog id="modal"><div class="modal-head"><div><span class="eyebrow" id="modalEyebrow">VIBE STUDIO</span><h2 id="modalTitle"></h2></div><button class="icon-button" id="closeModal" aria-label="关闭"><svg><use href="#i-close"/></svg></button></div><div id="modalContent"></div></dialog>
+  <input type="file" id="projectFile" accept="application/json,.json" hidden>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

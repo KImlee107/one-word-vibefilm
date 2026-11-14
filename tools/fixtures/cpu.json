@@ -1,0 +1,425 @@
+{
+  "version": 1,
+  "layout": "chip-cutaway-signal",
+  "designIntent": "展示指令进入芯片，在寄存器和运算单元之间移动，再将结果写回；外形和路径承担知识。",
+  "objects": [
+    {
+      "id": "heading",
+      "type": "text",
+      "text": "一枚指令，怎样变成一次运算？",
+      "x": 0.5,
+      "y": 0.035,
+      "w": 0.93,
+      "h": 0.16,
+      "fontSize": 0.056,
+      "fill": "$ink",
+      "stroke": "none",
+      "align": "center"
+    },
+    {
+      "id": "chip",
+      "type": "roundRect",
+      "x": 0.59,
+      "y": 0.54,
+      "w": 0.49,
+      "h": 0.67,
+      "fill": "$bg",
+      "stroke": "$gold",
+      "lineWidth": 2.2,
+      "animations": [
+        {
+          "property": "opacity",
+          "from": 0,
+          "to": 1,
+          "start": 0,
+          "end": 0.15,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "type": "roundRect",
+      "x": 0.13,
+      "y": 0.42,
+      "w": 0.17,
+      "h": 0.18,
+      "fill": "$faint",
+      "stroke": "$blue"
+    },
+    {
+      "id": "memory-label",
+      "type": "text",
+      "text": "存储器",
+      "x": 0.13,
+      "y": 0.42,
+      "w": 0.43,
+      "h": 0.16,
+      "fontSize": 0.03,
+      "fill": "$ink",
+      "stroke": "none",
+      "align": "center"
+    },
+    {
+      "id": "register",
+      "type": "rect",
+      "x": 0.53,
+      "y": 0.39,
+      "w": 0.23,
+      "h": 0.16,
+      "fill": "$faint",
+      "stroke": "$blue"
+    },
+    {
+      "id": "reg-label",
+      "type": "text",
+      "text": "寄存器",
+      "x": 0.53,
+      "y": 0.39,
+      "w": 0.43,
+      "h": 0.16,
+      "fontSize": 0.028,
+      "fill": "$ink",
+      "stroke": "none",
+      "align": "center"
+    },
+    {
+      "id": "alu",
+      "type": "path",
+      "x": 0.66,
+      "y": 0.68,
+      "w": 0.22,
+      "h": 0.24,
+      "path": "M 0 0 L 1000 0 L 780 500 L 1000 1000 L 0 1000 L 180 500 Z",
+      "fill": "none",
+      "stroke": "$gold",
+      "lineWidth": 2
+    },
+    {
+      "id": "alu-label",
+      "type": "text",
+      "text": "运算单元",
+      "x": 0.66,
+      "y": 0.68,
+      "w": 0.43,
+      "h": 0.16,
+      "fontSize": 0.026,
+      "fill": "$ink",
+      "stroke": "none",
+      "align": "center"
+    },
+    {
+      "id": "bus-in",
+      "type": "arrow",
+      "x": 0.225,
+      "y": 0.42,
+      "x2": 0.4,
+      "y2": 0.42,
+      "stroke": "$blue",
+      "lineWidth": 2,
+      "animations": [
+        {
+          "property": "reveal",
+          "from": 0,
+          "to": 1,
+          "start": 0.06,
+          "end": 0.25,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "bus-down",
+      "type": "arrow",
+      "x": 0.53,
+      "y": 0.48,
+      "x2": 0.53,
+      "y2": 0.68,
+      "stroke": "$gold",
+      "lineWidth": 2,
+      "animations": [
+        {
+          "property": "reveal",
+          "from": 0,
+          "to": 1,
+          "start": 0.3,
+          "end": 0.55,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "bus-write",
+      "type": "arrow",
+      "x": 0.78,
+      "y": 0.68,
+      "x2": 0.94,
+      "y2": 0.68,
+      "stroke": "$accent",
+      "lineWidth": 2,
+      "animations": [
+        {
+          "property": "reveal",
+          "from": 0,
+          "to": 1,
+          "start": 0.65,
+          "end": 0.9,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "instruction",
+      "type": "roundRect",
+      "x": 0.225,
+      "y": 0.42,
+      "w": 0.045,
+      "h": 0.05,
+      "fill": "$blue",
+      "stroke": "none",
+      "start": 0.08,
+      "end": 0.33,
+      "animations": [
+        {
+          "property": "x",
+          "from": 0.225,
+          "to": 0.4,
+          "start": 0.08,
+          "end": 0.33,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "decoded",
+      "type": "circle",
+      "x": 0.53,
+      "y": 0.48,
+      "r": 0.017,
+      "fill": "$gold",
+      "stroke": "none",
+      "start": 0.34,
+      "end": 0.62,
+      "animations": [
+        {
+          "property": "y",
+          "from": 0.48,
+          "to": 0.68,
+          "start": 0.34,
+          "end": 0.62,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "result",
+      "type": "roundRect",
+      "x": 0.79,
+      "y": 0.68,
+      "w": 0.04,
+      "h": 0.05,
+      "fill": "$gold",
+      "stroke": "none",
+      "start": 0.68,
+      "end": 1,
+      "animations": [
+        {
+          "property": "x",
+          "from": 0.79,
+          "to": 0.93,
+          "start": 0.68,
+          "end": 0.96,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "result-number",
+      "type": "number",
+      "x": 0.93,
+      "y": 0.83,
+      "value": 5,
+      "fromValue": 0,
+      "fontSize": 0.09,
+      "fill": "$gold",
+      "stroke": "none",
+      "start": 0.68,
+      "animations": [
+        {
+          "property": "reveal",
+          "from": 0,
+          "to": 1,
+          "start": 0.68,
+          "end": 0.96,
+          "easing": "easeInOut"
+        }
+      ]
+    },
+    {
+      "id": "result-label",
+      "type": "text",
+      "text": "写回结果",
+      "x": 0.93,
+      "y": 0.94,
+      "w": 0.43,
+      "h": 0.16,
+      "fontSize": 0.026,
+      "fill": "$muted",
+      "stroke": "none",
+      "align": "center"
+    },
+    {
+      "id": "step-label",
+      "type": "text",
+      "text": "取指 → 译码 → 执行",
+      "x": 0.57,
+      "y": 0.97,
+      "w": 0.43,
+      "h": 0.16,
+      "fontSize": 0.03,
+      "fill": "$muted",
+      "stroke": "none",
+      "align": "center"
+    },
+    {
+      "id": "pin-left-0",
+      "type": "rect",
+      "x": 0.332,
+      "y": 0.28,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-right-0",
+      "type": "rect",
+      "x": 0.848,
+      "y": 0.28,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-left-1",
+      "type": "rect",
+      "x": 0.332,
+      "y": 0.36500000000000005,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-right-1",
+      "type": "rect",
+      "x": 0.848,
+      "y": 0.36500000000000005,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-left-2",
+      "type": "rect",
+      "x": 0.332,
+      "y": 0.45000000000000007,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-right-2",
+      "type": "rect",
+      "x": 0.848,
+      "y": 0.45000000000000007,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-left-3",
+      "type": "rect",
+      "x": 0.332,
+      "y": 0.535,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-right-3",
+      "type": "rect",
+      "x": 0.848,
+      "y": 0.535,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-left-4",
+      "type": "rect",
+      "x": 0.332,
+      "y": 0.6200000000000001,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-right-4",
+      "type": "rect",
+      "x": 0.848,
+      "y": 0.6200000000000001,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-left-5",
+      "type": "rect",
+      "x": 0.332,
+      "y": 0.7050000000000001,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-right-5",
+      "type": "rect",
+      "x": 0.848,
+      "y": 0.7050000000000001,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-left-6",
+      "type": "rect",
+      "x": 0.332,
+      "y": 0.79,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    },
+    {
+      "id": "pin-right-6",
+      "type": "rect",
+      "x": 0.848,
+      "y": 0.79,
+      "w": 0.026,
+      "h": 0.025,
+      "fill": "$gold",
+      "stroke": "none"
+    }
+  ]
+}
