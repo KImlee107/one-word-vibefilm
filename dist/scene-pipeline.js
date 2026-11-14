@@ -1,7 +1,7 @@
-import {validateFilmProgram} from './film-program.js';
+import {validateFilmProgram,filmFingerprint} from './film-program.js';
 import {filmQualityError} from './film-quality.js';
 
-const unrecoverable=new Set(['RENDER_ENVIRONMENT','PROVIDER_AUTH','PROVIDER_RATE_LIMIT','PROVIDER_NETWORK','PROVIDER_TIMEOUT','NETWORK','CANCELLED','CUSTOM_ENDPOINT']);
+const unrecoverable=new Set(['RENDER_ENVIRONMENT','PROVIDER_AUTH','PROVIDER_BALANCE','PROVIDER_RATE_LIMIT','PROVIDER_NETWORK','PROVIDER_TIMEOUT','NETWORK','CANCELLED','CUSTOM_ENDPOINT']);
 function abort(signal){if(signal?.aborted)throw new DOMException('已取消','AbortError');}
 export async function buildSceneProgram({scene,project,context,rounds=2,textConfig,visionConfig,signal,api,inspect,onStage=()=>{},onCheckpoint=()=>{}}){
   let program=scene.codeFailure?.program||scene.draftProgram||null,draft=scene.codeFailure?.draft||'',inspection;
@@ -25,6 +25,7 @@ export async function buildSceneProgram({scene,project,context,rounds=2,textConf
       abort(signal);program=current;
       try{
         program=validateFilmProgram(current);
+        if(context.previousDesigns?.some(other=>other.fingerprint===filmFingerprint(program)))throw Object.assign(new Error('此镜动画结构与已有镜头重复，需要按当前机制重新设计。'),{code:'CODE_DUPLICATE',phase:'compile'});
         // Save valid source BEFORE executing it; failed drawings can be resumed.
         checkpoint({ready:false});
         onStage('正在检查多时刻画面、排版、主体运动与确定性');

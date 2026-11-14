@@ -19,7 +19,7 @@ fr.rect(左x,上y,w,h,{fill,color,w:描边宽度,r:圆角});
 fr.text('短标注',x,y,{font:'serif'或'sans'或'latin'或'mono',size:像素,color,a,align:'c'或'l'或'r',glow:2});
 fr.grad(x0,y0,x1,y1,[[0,'#hex',1],[1,'#hex',1]])返回渐变可作fill；fr.rgrad(cx,cy,内半径,外半径,stops)。
 fr.glow(x,y,r,color,a)微弱光晕。fr.x是CanvasRenderingContext2D，可用save/restore/beginPath/bezierCurveTo/fill等标准2D路径实现复杂物体（禁止取画布或访问图像数据）。
-实心物件可放fr.look.under=(ctx,t)=>{...标准Canvas绘制...}避免辉光洗白；或者fr.look.bloom=.1。不要更改fr.look.bg/bgo默认网页背景。文字最小S*.025、主数字S*.12，至少上下各留8%和20%。不用固定1920坐标。for循环必须有小于500的明确有限边界；不要while，不要递归。
+实心物件可放fr.look.under=(ctx,t)=>{...标准Canvas绘制...}避免辉光洗白；或者fr.look.bloom=.1。不要更改fr.look.bg/bgo默认网页背景。文字辅助标注至少S*.034、主标签至少S*.044、主数字S*.12；主体限制横向6%–94%、纵向18%–78%，与layoutContract一致。不用固定1920坐标。for循环必须有小于500的明确有限边界；不要while，不要递归。
 JSON输出必须为 {"version":1,"designIntent":"这次具体的画面如何解释机制","layout":"构图说明","heroObjects":["可辨识的具体对象"],"source":"独立JavaScript绘图函数体"}。只返回此JSON。至少有一个非文字主体按t发生知识动作。文字卡首尾镜可用数字/已有道具跟随推演。不要画整段旁白，不要仅使用相同三圆加连线的代码。
 `;
 export const SCENE_CODE_PROMPT=FILM_METHOD+CODE_API;

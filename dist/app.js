@@ -1,4 +1,5 @@
 import {buildSceneProgram} from './scene-pipeline.js';
+import {createRunDiagnostics,directingBriefForTopic} from './run-diagnostics.js';
 import {sceneArtReady,selectSceneRange,orderedSceneIndices,runSceneQueue} from './scene-queue.js';
 import {initializeAppearance} from './appearance.js';
 import {FILM_QUALITY_VERSION,filmQualityError} from './film-quality.js';
@@ -55,6 +56,8 @@ let preparingPlayback = false;
 let generation = {stage:'idle',started:0,total:0,completed:0,failed:0,detail:'',measurable:false};
 let generationTimer = null;
 let lastScriptFailure=null;
+const runDiagnostics=createRunDiagnostics();
+let briefBinding={topic:'',brief:''};
 let rangeProject=null,rangeSceneCount=0;
 
 try {
@@ -192,13 +195,12 @@ async function generateSelectedRange(){
 }
 function renderSceneFailures(){
   const list=$('generationFailures');list.replaceChildren();
-  project.scenes.forEach((scene,index)=>{
-    for(const [type,message]of [['code',scene.renderState==='failed'?scene.renderError:''],['video',scene.videoError]]){
-      if(!message)continue;const row=el('button','scene-failure-row');row.type='button';row.dataset.failedScene=String(index);row.dataset.failedType=type;
-      row.append(el('strong','',`${type==='video'?'AI 视频':'代码画面'} · 第 ${index+1} 镜 · ${scene.title}`),el('span','',message),el('small','',type==='video'?'查看 / 取回原 AI 任务 →':'查看本镜详情 →'));list.append(row);
-    }
-  });
+  for(const {index,type,title,message} of runDiagnostics.failures(project)){
+    const row=el('button','scene-failure-row');row.type='button';row.dataset.failedScene=String(index);row.dataset.failedType=type;
+    row.append(el('strong','',`${type==='video'?'AI 视频':'代码画面'} · 第 ${index+1} 镜 · ${title}`),el('span','',message),el('small','',type==='video'?'查看 / 取回原 AI 任务 →':'查看本镜详情 →'));list.append(row);
+  }
   list.hidden=!list.childElementCount;
+  $('generationFailureTools').hidden=list.hidden;
 }
 async function checkSelectedRange(){
   if(busy)return;
@@ -217,7 +219,7 @@ async function checkSelectedRange(){
         if(scene.renderState!=='complete'){scene.draftProgram=valid;scene.draftThumbnail=inspection.thumbnail;scene.renderState='pending';delete scene.codeFailure;scene.renderError='本地检查已通过，可继续所选视觉返修或以0轮完成检查。';}
       }catch(error){
         if(signal.aborted||error.name==='AbortError'||error.code==='RENDER_ENVIRONMENT')throw error;
-        flagged++;scene.renderState='failed';scene.renderError=error.message;scene.codeFailure={program,message:error.message,code:error.code||'SCENE_RUNTIME',phase:error.phase||'compile',quality:error.quality,repairs:0};scene.draftMeta={reviews:[],usage:[]};scene.draftReady=false;
+        flagged++;scene.renderState='failed';scene.renderError=error.message;runDiagnostics.track(target,scene.id,'code');scene.codeFailure={program,message:error.message,code:error.code||'SCENE_RUNTIME',phase:error.phase||'compile',quality:error.quality,repairs:0};scene.draftMeta={reviews:[],usage:[]};scene.draftReady=false;
       }
       checked++;saveLocal();updateProjectUI();setGenerationProgress({stage:'本地检查已有画面',total:indices.length,completed:checked-flagged,failed:flagged,measurable:true,detail:`已检查 ${checked} / ${indices.length} 镜，${flagged} 镜需返修。检查过程没有模型请求。`});
     }
@@ -230,7 +232,7 @@ function missingFrames(p=project){return p.scenes.filter(scene=>!artReady(scene)
 function setGenerationProgress({stage,total=0,completed=0,failed=0,detail='',measurable=false,newRun=false}){
   if(newRun||!generation.started){generation.started=Date.now();$('generationElapsed').textContent='已用时 00:00';}
   generation={...generation,stage,total,completed,failed,detail,measurable};
-  if(newRun){lastScriptFailure=null;$('scriptFailureActions').hidden=true;usageLedger.begin(stage);$('videoTaskProgress').hidden=true;}
+  if(newRun){runDiagnostics.begin(project);renderSceneFailures();lastScriptFailure=null;$('scriptFailureActions').hidden=true;usageLedger.begin(stage);$('videoTaskProgress').hidden=true;}
   $('generationPanel').hidden=false;
   $('generationTitle').textContent=stage;
   $('generationDetail').textContent=detail;
@@ -285,7 +287,7 @@ function applyBirthdayBrief(){
   $('topicInput').value='23个人中，至少两个人生日相同的概率为什么超过50%？';$('durationSelect').value='120';selectedRatio='16:9';selectedStyle='noir';selectedMode='code';$('ratioSelect').value=selectedRatio;
   all('[data-style]').forEach(button=>{button.classList.toggle('selected',button.dataset.style===selectedStyle);button.setAttribute('aria-pressed',String(button.dataset.style===selectedStyle));});
   $('styleDescription').textContent=getStyle(selectedStyle).description;setMode(selectedMode);
-  $('briefInput').value=String(BIRTHDAY_BRIEF).slice(0,18000);$('creativeBriefDetails').open=true;$('topicHint').textContent='生日悖论方案已填入 · 点击生成才替换当前项目';toast('方案已填入：120 秒、16:9、黑金叙事。当前项目和媒体尚未改变。');
+  $('briefInput').value=String(BIRTHDAY_BRIEF).slice(0,18000);briefBinding={topic:$('topicInput').value,brief:$('briefInput').value};$('reuseBriefToggle').checked=false;$('creativeBriefDetails').open=true;$('topicHint').textContent='生日悖论方案已填入 · 点击生成才替换当前项目';toast('方案已填入：120 秒、16:9、黑金叙事。当前项目和媒体尚未改变。');
 }
 function checkSceneFrame(target,index,composition){
   const size=getDimensions(target.ratio,{preview:true}),scale=Math.min(1,360/Math.max(size.width,size.height));
@@ -332,6 +334,7 @@ async function renderSceneArts(target,indices,{signal,stage='正在按顺序设�
     onResult:({index,status,error})=>{
       const scene=target.scenes[index];
       if(error){
+        if(status!=='cancelled')runDiagnostics.track(target,scene.id,'code');
         scene.renderState=status==='cancelled'?'pending':'failed';scene.renderError=status==='cancelled'?'生成已取消，可继续生成。':error.message;scene.draftReady=false;
         if(status!=='cancelled')scene.codeFailure={...(scene.codeFailure||{}),message:error.message,code:error.code||'SCENE_RUNTIME',phase:error.phase||scene.codeFailure?.phase||'request'};
       }
@@ -646,6 +649,8 @@ function updateProjectUI(renderShots = true) {
 function syncForm() {
   $('topicInput').value=project.topic||project.title;
   $('briefInput').value=typeof project.brief==='string'?project.brief:'';
+  $('reuseBriefToggle').checked=false;
+  briefBinding={topic:$('topicInput').value,brief:$('briefInput').value};
   $('durationSelect').value=String(DURATION_PRESETS.reduce((a,b)=>Math.abs(b.seconds-project.duration)<Math.abs(a.seconds-project.duration)?b:a).seconds);
   $('ratioSelect').value=selectedRatio;
   all('[data-style]').forEach(b=>{b.classList.toggle('selected',b.dataset.style===selectedStyle);b.setAttribute('aria-pressed',String(b.dataset.style===selectedStyle));});
@@ -804,10 +809,14 @@ async function generateProject(event) {
   let storyboardApplied=false;
   try{
     const sourceMusic=project.musicBlob,sourceMusicAnalysis=project.musicAnalysis;
-    const options={topic,brief:$('briefInput').value.trim().slice(0,18000),duration:Number($('durationSelect').value),ratio:selectedRatio,style:selectedStyle,mode:selectedMode,audience:'普通成年人',preferences:rules.join('\n')};
+    const directing=directingBriefForTopic({topic,brief:$('briefInput').value,boundTopic:briefBinding.topic,boundBrief:briefBinding.brief,reuse:$('reuseBriefToggle').checked});
+    if(directing.skipped){$('topicHint').textContent='新主题：本次未沿用旧主题的导演脚本；个人偏好与画面风格继续使用。';}
+    const options={topic,brief:directing.brief.slice(0,18000),duration:Number($('durationSelect').value),ratio:selectedRatio,style:selectedStyle,mode:selectedMode,audience:'普通成年人',preferences:rules.join('\n')};
     const script=await api.generateScript(configs.text,options,{signal:activeAbort.signal,onRepair:info=>setGenerationProgress({stage:'第一步 · 正在整理返回的分镜（1 / 1）',detail:info.reason+' 正在保留原内容并修正格式；此次会追加一次文本模型请求。'})});
     const next=engine.createProjectFromScript(script,options);if(!validProject(next))throw new Error('模型返回的分镜结构不完整，原项目保留。');
     pushUndo();project=next;storyboardApplied=true;project.mode=selectedMode;project.brief=options.brief;project.scriptMeta=script.apiMeta;if(sourceMusic instanceof Blob){project.musicBlob=sourceMusic;if(sourceMusicAnalysis)project.musicAnalysis=sourceMusicAnalysis;}project.isDemo=false;project.generatedFromApi=true;hasGenerated=true;
+    runDiagnostics.begin(project);$('briefInput').value=options.brief;briefBinding={topic,brief:options.brief};
+    if(script.normalizations?.length)toast(script.normalizations.join(' '));
     project.settings={music:$('musicToggle').checked,voice:$('voiceToggle').checked,captions:$('captionsToggle').checked};
     project.scenes.forEach(scene=>{scene.renderState='pending';delete scene.composition;delete scene.program;});selectedIndex=0;currentTime=0;releaseClipURL();updateProjectUI();saveLocal();
     await renderSceneArts(project,project.scenes.map((_,index)=>index),{signal:activeAbort.signal,stage:'第二步 · 逐镜独立设计画面'});
@@ -971,7 +980,7 @@ function showBatchAI({existingOnly=false}={}){
           const blob=await api.downloadVideo(configs.video,ready,{signal:controller.signal});if(project!==target)throw new Error('项目已切换，未写入旧任务。');
           target.videoClips=[...(target.videoClips||[]).filter(c=>c.sceneId!==scene.id),{sceneId:scene.id,blob,start:scene.start,duration:Math.min(scene.videoTask.duration||length,scene.duration),jobId:ready.id}];delete scene.videoError;completedCount++;releaseClipURL();saveLocal();updateProjectUI();
         }catch(error){
-          if(controller.signal.aborted||error.name==='AbortError')throw error;failedCount++;scene.videoError=`${phase}阶段：${error.message}`;scene.videoErrorCode=error.code||'VIDEO_ERROR';saveLocal();updateProjectUI();status.textContent='第 '+(index+1)+' 镜 · '+scene.videoError;
+          if(controller.signal.aborted||error.name==='AbortError')throw error;failedCount++;scene.videoError=`${phase}阶段：${error.message}`;scene.videoErrorCode=error.code||'VIDEO_ERROR';runDiagnostics.track(target,scene.id,'video');saveLocal();updateProjectUI();status.textContent='第 '+(index+1)+' 镜 · '+scene.videoError;
           if(shouldPauseVideoBatch(error))paused=true;
         }
         setGenerationProgress({stage:existingOnly?'正在取回原 AI 任务':'正在生成所选 AI 视频镜头',total:ids.length,completed:completedCount,failed:failedCount,detail:`已取回 ${completedCount} 镜，失败 ${failedCount} 镜，${ids.length-completedCount-failedCount} 镜尚未处理。具体错误保存在下方。`,measurable:true});
@@ -1027,7 +1036,7 @@ function showVideoGeneration() {
       pushUndo(); project.videoClips = (project.videoClips || []).filter((c) => c.sceneId !== target.id); project.videoClips.push({ sceneId: target.id, blob, start: target.start, duration: Math.min(scene.videoTask.duration||Number(duration.value), target.duration), jobId: completed.id });
       project.isDemo = false;scene.videoTask={...completed,duration:scene.videoTask.duration||Number(duration.value)};delete scene.videoError;updateResultLink();releaseClipURL(); markChanged();setGenerationProgress({stage:'当前 AI 视频镜头已完成',total:1,completed:1,detail:'实际片段已下载并加入时间线。',measurable:true});finishGeneration('当前 AI 视频镜头已完成');
       status.textContent = '片段已加入当前镜头，可在预览中检查。媒体仅保留在本页内存，刷新前请导出视频。'; toast('AI 画面已加入当前镜头。'); generate.textContent = '继续查询 / 下载原任务';
-    } catch (error) { status.textContent = error.name === 'AbortError' ? '已停止等待。已提交任务可继续取回，费用以账户记录为准。' : error.message;if(error.name!=='AbortError'){scene.videoError=error.message;scene.videoErrorCode=error.code;saveLocal();updateResultLink();}finishGeneration(error.name==='AbortError'?'已停止等待 AI 视频':'AI 镜头未取回，已保留原任务',{cancelled:error.name==='AbortError'});}
+    } catch (error) { status.textContent = error.name === 'AbortError' ? '已停止等待。已提交任务可继续取回，费用以账户记录为准。' : error.message;if(error.name!=='AbortError'){scene.videoError=error.message;scene.videoErrorCode=error.code;runDiagnostics.track(targetProject,scene.id,'video');saveLocal();updateResultLink();}finishGeneration(error.name==='AbortError'?'已停止等待 AI 视频':'AI 镜头未取回，已保留原任务',{cancelled:error.name==='AbortError'});}
     finally { setBusy(false); generate.disabled = false; controller = null;activeAbort=null;updateProjectUI(false); }
   });
   const optimize=el('button','button secondary','按 H3 工作流优化提示词');optimize.type='button';
@@ -1141,6 +1150,7 @@ $('createForm').addEventListener('submit', generateProject);
 $('downloadCodeFailure').addEventListener('click',()=>{const scene=getScene();const failure=scene.codeFailure||{};const diagnostic={type:'scene-code-failure',scene:{title:scene.title,narration:scene.narration,duration:scene.duration,visual:scene.visual},phase:failure.phase,message:scene.renderError||failure.message,program:failure.program||scene.draftProgram||scene.program,draft:failure.draft,quality:failure.quality,repairs:failure.repairs||scene.draftMeta?.codeRepairs||0};saveDownload(new Blob([JSON.stringify(diagnostic,null,2)],{type:'application/json;charset=utf-8'}),safeFileName(scene.title)+'-代码诊断.json').catch(e=>toast(e.message,true));});
 $('downloadScriptFailure').addEventListener('click',()=>{if(!lastScriptFailure)return;saveDownload(new Blob([JSON.stringify(lastScriptFailure,null,2)],{type:'application/json;charset=utf-8'}),'分镜返回诊断.json').catch(e=>toast(e.message,true));});
 $('birthdayBriefButton').addEventListener('click',applyBirthdayBrief);
+$('clearGenerationFailures').addEventListener('click',()=>{runDiagnostics.clear();renderSceneFailures();});
 $('alignMusicButton').addEventListener('click',applyMusicBeatToCurrentScenes);
 $('cancelGenerationButton').addEventListener('click',()=>{if(activeAbort){activeAbort.abort();$('generationDetail').textContent='正在取消尚未完成的请求，保留已完成的画面。';}});
 $('retrySceneButton').addEventListener('click',()=>retrySceneArt([selectedIndex]));

@@ -2,10 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildSceneProgram} from '../dist/scene-pipeline.js';
 import {chipProgram} from './fixtures/film-code.mjs';
+import {filmFingerprint} from '../dist/film-program.js';
 
 const inspection={frames:['a','b','c'],stats:[{coverage:.3}],thumbnail:'frame'};
 const runtimeError=()=>Object.assign(new Error('fr.notAFunction is not a function'),{code:'SCENE_RUNTIME',phase:'draw'});
 const broken={...chipProgram,source:chipProgram.source+'\nfr.notAFunction(t);'};
+
+test('a structurally duplicated scene is repaired once before rendering, instead of losing the generated source',async()=>{
+  const {options,calls}=setup();
+  options.context.previousDesigns=[{fingerprint:filmFingerprint(chipProgram)}];
+  const distinct={...chipProgram,source:chipProgram.source+'\nfr.circle(fr.w*.7,fr.h*.4,12+t,{fill:scene.palette.gold});'};
+  options.api.generateSceneCode=async()=>{calls.push('generate');return {program:chipProgram};};
+  options.api.repairSceneCode=async(config,payload)=>{calls.push('repair');assert.equal(payload.program.source,chipProgram.source);assert.match(payload.issue,/结构.*重复/);return {program:distinct};};
+  const result=await buildSceneProgram(options);assert.equal(result.program.source,distinct.source);assert.equal(result.repairs,1);assert.deepEqual(calls,['generate','repair','inspect']);
+});
 function setup(overrides={}){
   const calls=[],checkpoints=[],scene={title:'芯片',duration:10},project={ratio:'16:9'},context={scene,project};
   const api={generateSceneCode:async()=>{calls.push('generate');return {program:broken,usage:{tokens:100}};},repairSceneCode:async(config,payload)=>{calls.push('repair');assert.equal(payload.program.source,broken.source);assert.match(payload.issue,/notAFunction/);assert.equal(payload.scene.title,'芯片');return {program:chipProgram,usage:{tokens:20}};},reviewSceneCode:async()=>{calls.push('review');return {program:chipProgram,feedback:'放大引脚'};}};

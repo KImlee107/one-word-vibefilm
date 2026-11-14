@@ -2,6 +2,7 @@ import {KNOWLEDGE_WORKFLOW,H3_PROMPT} from './workflow-prompts.js';
 import {checkPublicEndpoint} from './endpoint.js';
 import {normalizeVisualValues,visualNumber,visualValueText} from '../dist/visual-data.js';
 import {normalizeStoryboard,describeStoryboardShape} from './storyboard.js';
+import {recoverSceneClosures} from './storyboard-json.js';
 import {validateFilmProgram,filmFingerprint,extractFilmProgram} from '../dist/film-program.js';
 import {FILM_METHOD,SCENE_CODE_PROMPT,SCENE_REVIEW_PROMPT,SCENE_REPAIR_PROMPT,PORTRAIT_DIRECTION} from './film-prompts.js';
 /** Same-origin API adapters. Keys are request-scoped and never persisted. */
@@ -92,6 +93,7 @@ async function upstream(config, path, { method = 'GET', body, headers = {}, sign
       try { const d = JSON.parse(raw); detail = d.error?.message || d.message || d.Message || ''; } catch { /* Do not expose HTML or arbitrary response text. */ }
       const safe = redact(detail, config.apiKey);
       const message = `服务商返回 HTTP ${result.status}${safe ? `：${safe}` : '，请检查密钥、地区、模型与账户权限。'}`;
+      if(result.status===402||/insufficient balance|余额不足|\b1008\b/i.test(safe))fail('PROVIDER_BALANCE','服务商余额不足，本次已暂停后续提交。充值后可继续；已提交任务请优先取回原结果，避免重复计费。',402);
       fail(result.status === 401 || result.status === 403 ? 'PROVIDER_AUTH' : result.status === 429 ? 'PROVIDER_RATE_LIMIT' : 'PROVIDER_ERROR', message, result.status === 429 ? 429 : 502);
     }
     return result;
@@ -110,6 +112,7 @@ async function upstreamJSON(config, path, options, fetcher) {
     const code=Number(data?.base_resp?.status_code||0);
     if(code!==0||data?.type==='error'){
       const message=redact(data?.base_resp?.status_msg||data?.error?.message||'服务商拒绝了本次请求。',config.apiKey);
+      if(code===1008)fail('PROVIDER_BALANCE','MiniMax 余额不足（1008），已暂停后续提交。充值后可继续；已有任务请先取回原结果，避免重新付费。',402);
       fail(code===1004?'PROVIDER_AUTH':'MINIMAX_PROVIDER',`MiniMax 返回${code?` ${code}`:''}：${message}`,502);
     }
   }
@@ -129,6 +132,16 @@ function parseModelJSON(value) {
       for(let i=start;i<clean.length;i++){const ch=clean[i];if(quoted){if(escape)escape=false;else if(ch==='\\')escape=true;else if(ch==='"')quoted=false;continue;}if(ch==='"'){quoted=true;continue;}if(ch==='{'||ch==='[')stack.push(ch);else if(ch==='}'||ch===']'){const prior=stack.pop();if((ch==='}'&&prior!=='{')||(ch===']'&&prior!=='['))break;if(!stack.length){try{return JSON.parse(clean.slice(start,i+1));}catch{break;}}}}
     }
     fail('SCRIPT_FORMAT', '模型返回的分镜不是有效 JSON，请整理返回内容后重试。', 502);
+  }
+}
+
+function parseStoryboardJSON(input){
+  try{return {value:parseModelJSON(input),normalizations:[]};}
+  catch(error){
+    if(error.code!=='SCRIPT_FORMAT'||typeof input!=='string')throw error;
+    const clean=input.replace(/^\uFEFF/,'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
+    const fenced=clean.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    try{return recoverSceneClosures(fenced?fenced[1].trim():clean);}catch{throw error;}
   }
 }
 
@@ -152,7 +165,9 @@ export function validateScene(input, index = 0) {
 }
 
 export function validateScript(input, targetDuration = 90, {topic=''}={}) {
-  const {object,normalizations}=normalizeStoryboard(parseModelJSON(input),{targetDuration,topic});
+  const parsed=parseStoryboardJSON(input);
+  const {object,normalizations}=normalizeStoryboard(parsed.value,{targetDuration,topic});
+  normalizations.unshift(...parsed.normalizations);
   if(!Array.isArray(object.scenes))fail('SCRIPT_FORMAT','模型已返回内容，但没有可读取的分镜列表。',502);
   if(object.scenes.length<3||object.scenes.length>48)fail('SCRIPT_FORMAT',`模型返回了 ${object.scenes.length} 个镜头，需要 3–48 个有效镜头。`,502);
   if(!text(object.title,120))fail('SCRIPT_FORMAT','分镜已返回，但缺少视频标题。',502);
@@ -175,7 +190,7 @@ function scriptSystemPrompt() {
 美术：构图与题材匹配，使用结构拆解、对象互动、数量累积、公式推导、数据图、空间比较等真正有解释力的手法。每镜布局有变化，背景粒子只是装饰。黑金叙事采用象牙白衬线字、暖金细线、稀疏尘点和大留白；其它风格遵循提供的字体、纹理和色板。字幕安全区留白。
 事实：不编造历史、统计数字或来源。未知来源不写URL并标待核查；图表没有可靠数据就画机制示意，不捏造精确值。概率前提明确，模拟与理论区分。旁白用自然中文，每镜title≤18中文字，caption≤30字，labels每项≤10字。visual.values仅填写明确的数字；“数万亿次”“海量”等描述写入visual.valueNotes并用文字呈现，不能凭空变成精确数字或可比较的条形长度。
 JSON结构：{"title":"标题","summary":"核心结论","sources":[{"title":"资料名称","url":"https://..."}],"scenes":[{"title":"分镜标题","narration":"可直接朗读的完整旁白","caption":"字幕提示","duration":10,"kind":"process","visual":{"layout":"该镜独立构图","visualIntent":"观众通过什么运动理解什么","heroObjects":["具体外形的主角一","具体外形的主角二"],"beats":[{"at":0,"meaning":"建立","change":"先出现什么"},{"at":0.35,"meaning":"变化","change":"哪个对象如何移动/分解/生长"},{"at":0.75,"meaning":"结果","change":"如何显示推演结果"}],"continuity":"与前后镜头怎样衔接","labels":["短标签"],"values":[],"valueNotes":[],"items":[],"description":"完整画面对象与空间关系","action":"随时间实际发生的知识变化","formula":"可选公式","emphasis":"重点"}}]}。
-kind仅为内容分类，可用process,compare,bars,network,timeline,orbit,particles,dice,combinations,distribution，不能以kind替代具体画面。所有镜头duration之和严格等于目标时长。镜头数量随时长：15秒约3镜，30秒4–5镜，60秒6–8镜，90秒8–12镜，120秒10–14镜，180秒14–20镜，300秒22–30镜，最多48镜。不要用同一固定镜头数生成所有时长。\n输出前逐项检查：顶层title为字符串；scenes为3–48项数组；每项title、narration是非空字符串，duration为秒数，kind为枚举值，visual为对象。即使用户要求只要成片，本阶段仍必须返回完整分镜数组，不能用任务确认、代码或方案摘要代替。`;
+kind仅为内容分类，可用process,compare,bars,network,timeline,orbit,particles,dice,combinations,distribution，不能以kind替代具体画面。所有镜头duration之和严格等于目标时长。镜头数量随时长：15秒约3镜，30秒4–5镜，60秒6–8镜，90秒8–12镜，120秒10–14镜，180秒14–20镜，300秒22–30镜，最多48镜。不要用同一固定镜头数生成所有时长。\n输出前逐项检查：顶层title为字符串；scenes为3–48项数组；每项title、narration是非空字符串，duration为秒数，kind为枚举值，visual为对象。特别检查visual对象结束后还需闭合scene对象：相邻镜头分隔必须是两个右花括号再逗号，即 }} , {；最后一镜也是先闭合visual和scene再闭合scenes数组，不能漏掉外层花括号。即使用户要求只要成片，本阶段仍必须返回完整分镜数组，不能用任务确认、代码或方案摘要代替。`;
 }
 
 function sceneArtSystemPrompt() {
@@ -332,7 +347,7 @@ async function binaryResponse(response, contentType) {
 
 async function routeAPI(request, env, fetcher) {
   const path = new URL(request.url).pathname;
-  if (request.method === 'GET' && path === '/api/health') return json({ ok: true, version: '0.7.0', skill:{name:'vibe-knowledge-film',commit:'62d51508aad00003dc6209afa80c4b5dc540de59'}, capabilities: ['script', 'script-restore', 'script-repair', 'scene-code','scene-code-repair','review-scene', 'scene-art', 'revise', 'speech', 'speech-minimax', 'video-minimax-h3','h3-prompt', 'video-dashscope', 'video-compatible'], credentials: 'request-only', externalCall: false });
+  if (request.method === 'GET' && path === '/api/health') return json({ ok: true, version: '0.7.1', skill:{name:'vibe-knowledge-film',commit:'62d51508aad00003dc6209afa80c4b5dc540de59'}, capabilities: ['script', 'script-restore', 'script-repair', 'scene-code','scene-code-repair','review-scene', 'scene-art', 'revise', 'speech', 'speech-minimax', 'video-minimax-h3','h3-prompt', 'video-dashscope', 'video-compatible'], credentials: 'request-only', externalCall: false });
   if (request.method !== 'POST') fail('METHOD_NOT_ALLOWED', '此接口仅接受 POST JSON 请求。', 405);
   const origin = request.headers.get('Origin');
   if (origin && origin !== new URL(request.url).origin) fail('ORIGIN_NOT_ALLOWED', '请从网站本身发起生成请求。', 403);
@@ -346,12 +361,12 @@ async function routeAPI(request, env, fetcher) {
   const signal = request.signal;
   if(path==='/api/script/restore'){
     const draft=text(payload.draft,50000);if(!draft)fail('RESTORE_REQUIRED','请选择含有 draft 字段的分镜返回诊断文件。');
-    const topic=text(payload.topic,2500),parsed=parseModelJSON(draft);
-    const normalized=normalizeStoryboard(parsed,{topic});
+    const topic=text(payload.topic,2500),parsed=parseStoryboardJSON(draft);
+    const normalized=normalizeStoryboard(parsed.value,{topic});
     const inferred=normalized.object.scenes?.reduce((sum,s)=>sum+(Number.isFinite(s?.duration)?s.duration:0),0);
     const duration=Number(payload.duration)||inferred;
     if(!Number.isFinite(duration)||duration<15||duration>MAX_PROJECT_DURATION)fail('DURATION','文件中的分镜时长无效，暂时无法恢复。');
-    const script=validateScript(parsed,duration,{topic});
+    const script=validateScript(draft,duration,{topic});
     return json({script,usage:null,mayBeBillable:false,restored:true,externalCall:false});
   }
   const config = validateProviderConfig(body.config, env);
@@ -453,13 +468,14 @@ async function routeAPI(request, env, fetcher) {
       parsed=parseModelJSON(result.content);candidate=extractFilmProgram(parsed);
       if(result.finishReason==='length')throw Object.assign(new Error('动画返回内容被模型长度上限截断，需要整理完整代码。'),{code:'MODEL_TRUNCATED'});
       program=validateFilmProgram(candidate);
+      if(previous.some(p=>p.fingerprint===filmFingerprint(program)))throw Object.assign(new Error('此镜的绘图代码与其它镜头重复，需要重新设计当前机制，不能仅换字。'),{code:'CODE_DUPLICATE'});
     }catch(e){
       const recoverable=isObject(candidate)&&typeof candidate.source==='string'&&candidate.source.length<=60000;
       const recovery={program:recoverable?{version:1,source:candidate.source.split(config.apiKey).join('[REDACTED]'),designIntent:text(candidate.designIntent,1200),layout:text(candidate.layout,160),heroObjects:(Array.isArray(candidate.heroObjects)?candidate.heroObjects:[]).slice(0,12)}:null,draft:result.content.slice(0,70000).split(config.apiKey).join('[REDACTED]'),phase:'compile',causeCode:e.code||'CODE_FORMAT',feedback:text(parsed?.feedback,1600),usage:result.usage};
-      return json({error:{code:'CODE_FORMAT',message:e.message},recovery,mayBeBillable:true},502);
+      console.warn(JSON.stringify({event:'scene-code-rejected',code:e.code||'CODE_FORMAT',phase:'compile',index:user.index,hasSource:recoverable,finishReason:result.finishReason}));
+      return json({error:{code:e.code==='CODE_DUPLICATE'?'CODE_DUPLICATE':'CODE_FORMAT',message:e.message},recovery,mayBeBillable:true},502);
     }
     const fingerprint=filmFingerprint(program);
-    if(previous.some(p=>p.fingerprint===fingerprint))fail('CODE_DUPLICATE','此镜的绘图代码与其它镜头重复，已拒绝仅换字的结果。',502);
     const feedback=path==='/api/review-scene'?text(parsed.feedback,1600):'';
     if(path==='/api/review-scene'&&(!feedback||program.source===payload.program.source))fail('REVIEW_UNCHANGED','视觉返修未提供实际修改，保留原代码并标记未完成。',502);
     return json({program,fingerprint,feedback,skill:'vibe-knowledge-film',usage:result.usage,mayBeBillable:true});

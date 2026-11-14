@@ -54,7 +54,7 @@
   </aside>
   <div class="app-shell">
     <header class="topbar">
-      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.7.0</span></div>
+      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.7.1</span></div>
       <div class="topbar-actions">
         <span class="save-state" id="saveState"><span></span>已保存到本机</span>
         <label class="ui-font-control" for="uiFontSize"><span>界面字号</span><select id="uiFontSize" aria-label="界面字号"><option value="18">18px</option><option value="20">20px</option><option value="22">22px</option></select></label>
@@ -76,7 +76,8 @@
         <div class="generation-bar" id="generationBar" role="progressbar" aria-label="生成进度" aria-valuemin="0" aria-valuemax="100"><span id="generationFill"></span></div>
         <div class="generation-details"><span id="generationDetail">实际阶段与完成镜头数会显示在这里。</span><span id="generationElapsed">已用时 00:00</span></div>
         <div class="video-task-progress" id="videoTaskProgress" hidden aria-busy="false"><i></i><span id="videoTaskState"></span></div>
-        <div class="generation-failures" id="generationFailures" hidden aria-label="未完成镜头及原因"></div>
+        <div class="generation-details" id="generationFailureTools" hidden><span>仅显示本次任务的镜头错误；历史原因保留在各镜详情中。</span><button class="text-button" id="clearGenerationFailures" type="button">清空本次提示</button></div>
+        <div class="generation-failures" id="generationFailures" hidden aria-label="本次任务未完成镜头及原因"></div>
         <div class="generation-next" id="scriptFailureActions" hidden><p>此次生成已停止。可下载本次返回内容，查看缺失字段或其他格式问题。</p><div><button class="button secondary" id="downloadScriptFailure" type="button">下载本次返回内容</button><button class="button secondary" id="continueSavedStoryboard" type="button" hidden>继续已有分镜</button></div></div>
         <div class="generation-next" id="generationNext" hidden><p id="generationNextText"></p><div><button class="button secondary" id="resumeArtButton" type="button">补齐未完成画面</button><button class="button secondary" id="resumeVideoTasksButton" type="button" hidden>只取回已提交 AI 结果</button><button class="button primary" id="batchAIButton" type="button">选择并生成 AI 镜头</button></div></div>
       </section>
@@ -88,6 +89,7 @@
             <textarea id="topicInput" rows="3" maxlength="120" placeholder="例如：为什么两个骰子，7 最容易出现？">为什么两个骰子，7 最容易出现？</textarea>
             <div class="topic-hint"><span class="status-dot"></span><span id="topicHint">本地模板 · 骰子与概率</span><button type="button" id="topicExamples">换个选题</button></div>
             <details class="brief-details" id="creativeBriefDetails"><summary>创作说明 / 分镜脚本<span>选填</span></summary><label class="sr-only" for="briefInput">创作说明或分镜脚本</label><textarea id="briefInput" rows="7" maxlength="18000" placeholder="可粘贴导演要求、分镜、视觉物件、镜头节奏和配乐说明。生成时会真正传给模型，不只是展示提示词。"></textarea><p>保留你提供的事实、推演和视觉要求；画面与音乐以实际生成及上传结果为准。</p></details>
+            <label class="brief-reuse"><input type="checkbox" id="reuseBriefToggle">换主题时仍沿用上一个主题的导演脚本</label>
             <div class="creative-tools"><button type="button" class="text-button" id="birthdayBriefButton">套用生日悖论方案 <span>↗</span></button><button type="button" class="text-button" id="restoreStoryboardButton">恢复已下载的分镜 <span>↗</span></button></div>
             <div class="field-title"><span>画面制作方式</span><button type="button" class="text-button" id="modeHelp">有什么区别？</button></div>
             <div class="mode-grid" role="group" aria-label="画面制作方式">

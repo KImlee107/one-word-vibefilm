@@ -105,3 +105,5 @@ html[data-theme] body.studio-ui .video-task-progress[aria-busy=true] i{animation
 @keyframes task-wait{to{transform:rotate(360deg)}}
 @media(max-width:820px){html[data-theme] body.studio-ui .usage-panel{flex-direction:column;align-items:stretch;padding:16px}}
 @media(prefers-reduced-motion:reduce){html[data-theme] body.studio-ui .video-task-progress[aria-busy=true] i{animation:none}}
+
+.brief-reuse{display:flex;align-items:flex-start;gap:10px;font-size:calc(var(--ui-size,18px)*.8);line-height:1.6;margin:10px 0 14px;opacity:.85}.brief-reuse input{flex:none;width:18px;height:18px;margin:3px 0 0;accent-color:var(--accent,#aaa1eb)}
