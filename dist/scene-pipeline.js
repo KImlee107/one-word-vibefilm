@@ -3,7 +3,7 @@ import {filmQualityError} from './film-quality.js';
 
 const unrecoverable=new Set(['RENDER_ENVIRONMENT','PROVIDER_AUTH','PROVIDER_BALANCE','PROVIDER_RATE_LIMIT','PROVIDER_NETWORK','PROVIDER_TIMEOUT','NETWORK','CANCELLED','CUSTOM_ENDPOINT']);
 function abort(signal){if(signal?.aborted)throw new DOMException('已取消','AbortError');}
-export async function buildSceneProgram({scene,project,context,rounds=2,textConfig,visionConfig,signal,api,inspect,onStage=()=>{},onCheckpoint=()=>{}}){
+export async function buildSceneProgram({scene,project,context,rounds=2,repairLimit=1,textConfig,visionConfig,signal,api,inspect,onStage=()=>{},onCheckpoint=()=>{}}){
   let program=scene.codeFailure?.program||scene.draftProgram||null,draft=scene.codeFailure?.draft||'',inspection;
   const reviews=[...(scene.draftMeta?.reviews||[])],usage=[...(scene.draftMeta?.usage||[])];let repairs=0;
   async function obtain(action){
@@ -14,7 +14,7 @@ export async function buildSceneProgram({scene,project,context,rounds=2,textConf
   function checkpoint(extra){onCheckpoint({program,inspection,reviews:[...reviews],usage:[...usage],repairs,...extra});}
   async function repair(error,current,raw=''){
     const failure={program:current,draft:raw,message:error.message,code:error.code||'SCENE_RUNTIME',phase:error.phase||'compile',quality:error.quality,repairs};checkpoint({ready:false,failure});
-    if(repairs>=1){error.repairExhausted=true;error.phase=failure.phase;throw error;}
+    if(repairs>=(repairLimit===0?0:1)){error.repairExhausted=true;error.phase=failure.phase;throw error;}
     repairs++;onStage('正在修复本镜代码 / 排版（1 / 1）· '+error.message);checkpoint({ready:false,failure:{...failure,repairs}});
     const fixed=await obtain(()=>api.repairSceneCode(textConfig,{...context,program:current||null,draft:raw,issue:error.message,phase:failure.phase,qualityReport:error.quality},{signal}));
     usage.push(fixed.usage||null);draft=fixed.draft||'';return fixed.program;

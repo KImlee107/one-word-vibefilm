@@ -47,6 +47,21 @@ test('missing rendered review frames are rejected before billing and duplicate c
   const duplicate=await handleAPI(req('/api/scene-code',{...payload,previousDesigns:[{fingerprint:filmFingerprint(chipProgram)}]}),{},{fetch:async()=>model({...chipProgram,source:chipProgram.source.replace('FETCH  →  DECODE  →  EXECUTE','ONLY LABELS')})});assert.equal(duplicate.status,502);assert.equal((await duplicate.json()).error.code,'CODE_DUPLICATE');
 });
 
+test('a visual review may keep a good program only with explicit approval and a passing measured report',async()=>{
+  const frames=Array(3).fill('data:image/jpeg;base64,AAAA');
+  const approved=await handleAPI(req('/api/review-scene',{...payload,program:chipProgram,frames,qualityReport:{ok:true,issues:[]}}),{},{fetch:async()=>model({approved:true,feedback:'三帧中引脚清楚、指令沿总线推进，标签均在安全区且无交叠。'})});
+  assert.equal(approved.status,200);const result=await approved.json();assert.equal(result.approved,true);assert.equal(result.program.source,chipProgram.source);
+  const rejected=await handleAPI(req('/api/review-scene',{...payload,program:chipProgram,frames,qualityReport:{ok:false,issues:[{code:'TEXT_OVERLAP'}]}}),{},{fetch:async()=>model({approved:true,feedback:'很好'})});
+  assert.equal(rejected.status,502);assert.equal((await rejected.json()).error.code,'REVIEW_UNCHANGED');
+});
+
+test('preserved-fact rewriting rejects altered numbers before scene generation',async()=>{
+  const source={...scene,narration:'先验1/2，似然1/6，联合1/12。',caption:'1/12',visual:{formula:'1/2×1/6=1/12'}};
+  const response=await handleAPI(req('/api/revise',{scene:source,instruction:'简化文案',preserveFacts:true}),{},{fetch:async()=>model({...source,narration:'联合概率1/5。'})});
+  assert.equal(response.status,502);assert.equal((await response.json()).error.code,'SCENE_REWRITE_FACTS');
+  const good=await handleAPI(req('/api/revise',{scene:source,instruction:'简化文案',preserveFacts:true}),{},{fetch:async()=>model({...source,narration:'1/2乘1/6，得到1/12。'})});assert.equal(good.status,200);
+});
+
 test('ss/lerp free helpers reproduce the former failure and now render with local shadowing',async()=>{
   const source=chipProgram.source.replaceAll('VK.ss','ss').replaceAll('VK.lerp','lerp');
   assert.throws(()=>new Function('fr','t','scene','VK',source)({w:400,h:240,rect(){},line(){},poly(){}},1,{duration:10,palette:{}},{clamp:x=>x}),/ss is not defined/);

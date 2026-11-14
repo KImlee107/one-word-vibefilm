@@ -54,7 +54,7 @@
   </aside>
   <div class="app-shell">
     <header class="topbar">
-      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.7.1</span></div>
+      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.8.0</span></div>
       <div class="topbar-actions">
         <span class="save-state" id="saveState"><span></span>已保存到本机</span>
         <label class="ui-font-control" for="uiFontSize"><span>界面字号</span><select id="uiFontSize" aria-label="界面字号"><option value="18">18px</option><option value="20">20px</option><option value="22">22px</option></select></label>
@@ -106,6 +106,11 @@
             <div class="style-grid expanded-styles" id="stylePresets" role="group" aria-label="视觉风格"></div><p class="style-description" id="styleDescription"></p>
             <div class="skill-status"><span class="status-dot"></span><a href="https://github.com/HeyChengC/vibe-knowledge-film" target="_blank" rel="noopener noreferrer">vibe-knowledge-film 已接入 ↗</a><small>现写代码 · 实际渲染 · 看图返修</small></div>
             <label class="field-label" for="reviewRoundsSelect">视觉返修轮数</label><select id="reviewRoundsSelect"><option value="2" selected>2 轮 · 推荐质量</option><option value="1">1 轮 · 减少调用</option><option value="0">仅代码与静帧检查 · 费用较低</option></select><p class="review-note">每镜 1 次代码生成 + 所选轮数的看图返修。代码 / 返回格式 / 排版问题合计最多追加 1 次文本模型修复，仍失败按所选策略继续或暂停，并保留代码；分镜格式整理也最多追加 1 次请求。实际阶段与完成数会显示在进度条中。</p>
+            <div class="workflow-options"><button class="text-button" id="workflowHelpButton" type="button">先做样片，再铺全片 ↗</button>
+              <label class="field-label" for="creationWorkflow">生成流程</label><select id="creationWorkflow"><option value="all">分镜后生成全部画面</option><option value="pilot">先生成前 2 镜样片 · 推荐</option><option value="storyboard">只生成分镜，画面按范围制作</option></select>
+              <label class="field-label" for="sceneRecoveryPolicy">画面仍报错时</label><select id="sceneRecoveryPolicy"><option value="redesign">保留文案，重设计 1 次</option><option value="rewrite">简化本镜文案，再重设计 1 次</option><option value="stop">保留诊断，手动处理</option></select>
+              <p class="review-note">正常修复仍最多 1 次。重设计最多再增加 1 次文本请求；改写后重做最多增加 2 次。新稿再做本地验收，不循环重试。余额、鉴权、网络问题直接暂停。</p>
+            </div>
             <div class="audio-settings">
               <label><span><svg><use href="#i-headphones"/></svg>中文旁白</span><input id="voiceToggle" type="checkbox" checked><i class="switch"></i></label>
               <label><span>中文字幕</span><input id="captionsToggle" type="checkbox" checked><i class="switch"></i></label>
@@ -140,6 +145,8 @@
             <div class="scene-tools"><label>镜头时长 <input id="sceneDuration" type="number" min="1" max="120" step="0.5"> 秒</label><button id="splitButton" class="text-button">在播放头拆分</button></div>
             <label class="field-label" for="sceneNarration">旁白与字幕文案</label><textarea id="sceneNarration" rows="4" maxlength="320"></textarea>
             <button class="text-button apply-copy" id="applyCopyButton">应用文案修改<svg><use href="#i-arrow"/></svg></button>
+            <div class="scene-recovery-actions"><button class="button secondary full-width" id="redesignSceneButton" type="button">保留文案，重新设计画面</button><button class="button secondary full-width" id="rewriteSceneButton" type="button">简化本镜文案并重做</button><p class="review-note">只处理这一镜，可撤销。改写会校验已有数字与公式；文案改变后需重做本镜配音。</p></div>
+            <details class="scene-frame-details" id="sceneFrameDetails" hidden open><summary>最近渲染的真实关键帧</summary><p id="sceneFrameReport"></p><div class="scene-frame-grid" id="sceneFrameGrid"></div><p class="review-note">点击放大。来自本页最近一次可渲染稿，不代表当前任务已完成；只在本页保留，不代表已通过全部审美或事实核查。</p></details>
             <details class="scene-code-details" id="sceneCodeDetails" hidden><summary>查看本镜代码与返修记录</summary><p id="sceneCodeChecks"></p><button class="button secondary" id="downloadCodeFailure" type="button" hidden>下载此镜代码诊断</button><pre id="sceneCodeSource"></pre></details>
             <div class="inspector-divider"></div>
             <div class="field-title"><span>这一镜，还可以更好</span><svg class="accent-icon"><use href="#i-spark"/></svg></div>

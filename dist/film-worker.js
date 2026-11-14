@@ -54,6 +54,46 @@ function makeFilm(message){
     if(lines.length>(Number(o.maxLines)||2))throw new Error('标签超过两行，请缩短标注或扩大标注区域。');
     const lineHeight=size*1.3;lines.forEach((line,i)=>this.text(line,x,y+(i-(lines.length-1)/2)*lineHeight,{...o,size}));
   };
+  // Small drawing primitives, never complete scene templates. Positions inside
+  // pivot remain absolute, unlike g({at}), which creates a local coordinate origin.
+  film.fr.pivot=function(x,y,o,fn){this.g({...o,at:[x,y]},()=>this.g({at:[-x,-y]},fn));};
+  film.fr.fraction=function(n,d,x,y,o={}){
+    if(n===undefined||d===undefined||String(n).trim()===''||String(d).trim()===''||Number(d)===0)throw new Error('分数必须有完整分子和非零分母。');
+    const size=Math.max(Math.min(width,height)*.034,Number(o.size)||Math.min(width,height)*.05),font=o.font||'serif';
+    const w=Math.max(this.measure(String(n),{font,size}),this.measure(String(d),{font,size}))+size*.42;
+    this.text(String(n),x,y-size*.72,{...o,font,size,align:'c',base:'middle'});
+    this.text(String(d),x,y+size*.72,{...o,font,size,align:'c',base:'middle'});
+    this.line(x-w/2,y,x+w/2,y,{color:o.color||palette.ink,w:Math.max(1,size*.065),a:o.a??1});
+    return {width:w,height:size*2.7,left:x-w/2,top:y-size*1.35};
+  };
+  film.fr.equation=function(parts,x,y,o={}){
+    if(!Array.isArray(parts)||parts.length>18)throw new Error('公式请使用不超过18项的数组。');
+    const size=Math.max(Math.min(width,height)*.034,Number(o.size)||Math.min(width,height)*.055),font=o.font||'serif',gap=Number(o.gap)||size*.55;
+    const widths=parts.map(p=>typeof p==='object'?Math.max(this.measure(String(p.n),{font,size}),this.measure(String(p.d),{font,size}))+size*.42:this.measure(String(p),{font,size}));
+    const w=widths.reduce((a,b)=>a+b,0)+Math.max(0,parts.length-1)*gap;
+    if(w>(o.maxWidth||width*.88))throw new Error('公式行过宽，请分阶段展示或改为上下推导，不能缩成微字。');
+    let left=x-(o.align==='l'?0:o.align==='r'?w:w/2);
+    for(let i=0;i<parts.length;i++){const p=parts[i],cx=left+widths[i]/2,style={...o,font,size,color:typeof p==='object'?p.color||o.color:o.color};if(typeof p==='object')this.fraction(p.n,p.d,cx,y,style);else this.text(String(p),cx,y,{...style,align:'c',base:'middle'});left+=widths[i]+gap;}
+    return {width:w,height:size*2.7};
+  };
+  film.fr.die=function(cx,cy,size,o={}){
+    const value=o.value??3;if(!Number.isInteger(value)||value<1||value>6)throw new Error('骰子正面点数必须为1–6的整数。');
+    const body=o.fill||palette.white||palette.ink,edge=o.color||palette.gold,rgb=G.VK.hex(body),brightness=rgb[0]*.299+rgb[1]*.587+rgb[2]*.114,pip=o.pip||(brightness>128?'#24282d':'#f6efda'),d=size*.22,x=cx-size/2,y=cy-size/2;
+    this.poly([[x,y],[x+d,y-d*.7],[x+size+d,y-d*.7],[x+size,y]],{fill:G.VK.mix(body,palette.bg,.15),color:edge,w:size*.018,close:true});
+    this.poly([[x+size,y],[x+size+d,y-d*.7],[x+size+d,y+size-d*.7],[x+size,y+size]],{fill:G.VK.mix(body,palette.bg,.32),color:edge,w:size*.018,close:true});
+    this.rect(x,y,size,size,{fill:body,color:edge,w:size*.02,r:size*.07});
+    const patterns=[[],[[.5,.5]],[[.28,.28],[.72,.72]],[[.28,.28],[.5,.5],[.72,.72]],[[.28,.28],[.72,.28],[.28,.72],[.72,.72]],[[.28,.28],[.72,.28],[.5,.5],[.28,.72],[.72,.72]],[[.28,.25],[.72,.25],[.28,.5],[.72,.5],[.28,.75],[.72,.75]]];
+    for(const [px,py]of patterns[value])this.circle(x+size*px,y+size*py,size*.065,{fill:pip});
+    // Blank shaded upper/side faces avoid suggesting false extra outcomes.
+    return {left:x,top:y-d*.7,width:size+d,height:size+d*.7};
+  };
+  film.fr.probabilityBar=function(x,y,w,h,parts,o={}){
+    if(!Array.isArray(parts)||parts.length>12||parts.some(p=>!Number.isFinite(p.value)||p.value<0)||Math.abs(parts.reduce((a,p)=>a+p.value,0)-1)>.001)throw new Error('概率条各段必须为非负有限数且合计为1；联合概率请先明确分母。');
+    const ctx=this.x;ctx.save();ctx.globalAlpha*=o.a??1;ctx.beginPath();ctx.roundRect(x,y,w,h,Math.min(h/2,o.r??h*.18));ctx.clip();let left=x;
+    for(const part of parts){this.rect(left,y,w*part.value,h,{fill:part.color||palette.gold});left+=w*part.value;}
+    ctx.restore();this.rect(x,y,w,h,{color:o.color||palette.muted,w:Math.max(1,h*.05),r:Math.min(h/2,o.r??h*.18),a:o.a??1});
+    left=x;return parts.map(p=>{const rect={x:left,y,width:w*p.value,height:h};left+=rect.width;return rect;});
+  };
   const layer=film.fr.layer;
   film.fr.layer=function(o,fn){
     const first=trace.texts.length,m=this.x.getTransform(),alpha=this.x.globalAlpha;

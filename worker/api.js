@@ -3,6 +3,7 @@ import {checkPublicEndpoint} from './endpoint.js';
 import {normalizeVisualValues,visualNumber,visualValueText} from '../dist/visual-data.js';
 import {normalizeStoryboard,describeStoryboardShape} from './storyboard.js';
 import {recoverSceneClosures} from './storyboard-json.js';
+import {preserveSceneFacts} from '../dist/scene-recovery.js';
 import {validateFilmProgram,filmFingerprint,extractFilmProgram} from '../dist/film-program.js';
 import {FILM_METHOD,SCENE_CODE_PROMPT,SCENE_REVIEW_PROMPT,SCENE_REPAIR_PROMPT,PORTRAIT_DIRECTION} from './film-prompts.js';
 /** Same-origin API adapters. Keys are request-scoped and never persisted. */
@@ -347,7 +348,7 @@ async function binaryResponse(response, contentType) {
 
 async function routeAPI(request, env, fetcher) {
   const path = new URL(request.url).pathname;
-  if (request.method === 'GET' && path === '/api/health') return json({ ok: true, version: '0.7.1', skill:{name:'vibe-knowledge-film',commit:'62d51508aad00003dc6209afa80c4b5dc540de59'}, capabilities: ['script', 'script-restore', 'script-repair', 'scene-code','scene-code-repair','review-scene', 'scene-art', 'revise', 'speech', 'speech-minimax', 'video-minimax-h3','h3-prompt', 'video-dashscope', 'video-compatible'], credentials: 'request-only', externalCall: false });
+  if (request.method === 'GET' && path === '/api/health') return json({ ok: true, version: '0.8.0', skill:{name:'vibe-knowledge-film',commit:'62d51508aad00003dc6209afa80c4b5dc540de59'}, capabilities: ['script', 'script-restore', 'script-repair', 'scene-code','scene-code-repair','review-scene', 'scene-art', 'revise', 'speech', 'speech-minimax', 'video-minimax-h3','h3-prompt', 'video-dashscope', 'video-compatible'], credentials: 'request-only', externalCall: false });
   if (request.method !== 'POST') fail('METHOD_NOT_ALLOWED', '此接口仅接受 POST JSON 请求。', 405);
   const origin = request.headers.get('Origin');
   if (origin && origin !== new URL(request.url).origin) fail('ORIGIN_NOT_ALLOWED', '请从网站本身发起生成请求。', 403);
@@ -448,6 +449,7 @@ async function routeAPI(request, env, fetcher) {
     const brief=text(project.brief,18000);
     const user={scene,index:Number(payload.index)||0,project:{title:text(project.title,160),topic:text(project.topic,2500),summary:text(project.summary,1500),brief,ratio:normalizeRatio(project.ratio),scenes:(Array.isArray(project.scenes)?project.scenes:[]).slice(0,48).map(s=>({title:text(s?.title,100),visual:cleanVisual(s?.visual)}))},styleGuide:style,factualAnchors:briefFacts(project.topic,brief),previousDesigns:previous,preferences:text(payload.preferences,2400)};
     user.layoutContract={ratio:normalizeRatio(project.ratio),contentX:[.06,.94],contentY:[.18,.78],minimumLabelSize:'shortSide * 0.034',primaryLabelSize:'shortSide * 0.044',captions:'application overlay'};
+    if(isObject(payload.recoveryPlan))user.recoveryPlan={mode:text(payload.recoveryPlan.mode,30),reason:text(payload.recoveryPlan.reason,1000),attempt:1,maxAttempts:1,qualityReport:text(JSON.stringify(payload.recoveryPlan.qualityReport||{}),7000),instruction:'旧布局已失败：保留当前事实和时长，重新设计更清楚的分阶段构图，不复刻错误坐标，不输出只改几字的旧画面。'};
     let messages,prompt=SCENE_CODE_PROMPT+PORTRAIT_DIRECTION;
     if(path==='/api/review-scene'){
       let prior;try{prior=validateFilmProgram(payload.program);}catch(e){fail('CODE_FORMAT',e.message);}
@@ -465,7 +467,7 @@ async function routeAPI(request, env, fetcher) {
     const result=await chat(config,messages,{signal,fetcher,maxTokens:18000,allowTruncated:true});
     let parsed,candidate,program;
     try{
-      parsed=parseModelJSON(result.content);candidate=extractFilmProgram(parsed);
+      parsed=parseModelJSON(result.content);candidate=extractFilmProgram(path==='/api/review-scene'&&parsed.approved===true&&!parsed.program?payload.program:parsed);
       if(result.finishReason==='length')throw Object.assign(new Error('动画返回内容被模型长度上限截断，需要整理完整代码。'),{code:'MODEL_TRUNCATED'});
       program=validateFilmProgram(candidate);
       if(previous.some(p=>p.fingerprint===filmFingerprint(program)))throw Object.assign(new Error('此镜的绘图代码与其它镜头重复，需要重新设计当前机制，不能仅换字。'),{code:'CODE_DUPLICATE'});
@@ -477,8 +479,9 @@ async function routeAPI(request, env, fetcher) {
     }
     const fingerprint=filmFingerprint(program);
     const feedback=path==='/api/review-scene'?text(parsed.feedback,1600):'';
-    if(path==='/api/review-scene'&&(!feedback||program.source===payload.program.source))fail('REVIEW_UNCHANGED','视觉返修未提供实际修改，保留原代码并标记未完成。',502);
-    return json({program,fingerprint,feedback,skill:'vibe-knowledge-film',usage:result.usage,mayBeBillable:true});
+    const approved=path==='/api/review-scene'&&parsed.approved===true&&payload.qualityReport?.ok===true;
+    if(path==='/api/review-scene'&&(!feedback||program.source===payload.program.source&&!approved))fail('REVIEW_UNCHANGED','视觉返修未提供实际修改，保留原代码并标记未完成。',502);
+    return json({program,fingerprint,feedback,approved,skill:'vibe-knowledge-film',usage:result.usage,mayBeBillable:true});
   }
   if(path==='/api/scene-art'){
     const source=isObject(payload.scene)?payload.scene:{};
@@ -498,9 +501,10 @@ async function routeAPI(request, env, fetcher) {
   if (path === '/api/revise') {
     const original = validateScene(payload.scene);
     const instruction = text(payload.instruction, 1800); if (!instruction) fail('INSTRUCTION_REQUIRED', '请描述希望如何修改这个镜头。');
-    const system = scriptSystemPrompt() + '\n本次只修改一个分镜。返回该分镜JSON对象本身，保留输入duration不变，不输出整个脚本。';
+    const system = scriptSystemPrompt() + '\n本次只修改一个分镜。返回该分镜JSON对象本身，保留输入duration不变，不输出整个脚本。'+(payload.preserveFacts===true?'\n本次只简化表述和画面步骤：原数字、公式、适用条件和结论必须保留，不能增添新数字、新假设或改变例子；原formula字段逐字保留。':'');
     const result = await chat(config, [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify({ scene: original, instruction, context: text(payload.context, 1200) }) }], { signal, fetcher, jsonMode: payload.jsonMode !== false });
     const revised = validateScene(parseModelJSON(result.content));
+    if(payload.preserveFacts===true){try{preserveSceneFacts(original,revised);}catch(e){return json({error:{code:e.code,message:e.message},usage:result.usage,mayBeBillable:true},502);}}
     revised.duration = original.duration;
     return json({ scene: revised, usage: result.usage, mayBeBillable: true });
   }
