@@ -14,7 +14,9 @@ import {DURATION_PRESETS,RATIO_PRESETS,STYLE_PRESETS,MAX_PROJECT_DURATION,getDim
 import {validateComposition,compositionFingerprint} from './composition.js';
 import {createReferenceDemo} from './demos.js';
 import {BIRTHDAY_BRIEF} from './briefs.js';
-import {analyzeMusicFile,snapCompositionToBeats} from './beat.js';
+import {analyzeMusicFile} from './beat.js';
+import {DEFAULT_MUSIC,musicAnalysis,musicSource} from './music.js';
+import {buildRhythmPlan,sceneMusicBeats,timelineRhythmStats,validRhythm,musicTimeAt} from './rhythm.js';
 
 const $ = (id) => document.getElementById(id);
 const all = (selector) => Array.from(document.querySelectorAll(selector));
@@ -266,24 +268,32 @@ function finishGeneration(message,{cancelled=false}={}){
 }
 function sceneArtPayload(target,index){
   const source=target.scenes[index];
-  return {scene:{title:source.title,narration:source.narration,caption:source.caption,duration:source.duration,kind:source.kind,visual:source.visual},index,sceneCount:target.scenes.length,project:{title:target.title,topic:target.topic,summary:target.summary||'',duration:target.duration,ratio:target.ratio,style:target.style,brief:target.brief||'',scenes:target.scenes.map(scene=>({title:scene.title,kind:String(scene.kind||'process').replace(/^script:/,''),visual:scene.visual}))},previousDesigns:target.scenes.filter((scene,i)=>i!==index&&artReady(scene)).map(scene=>({layout:(scene.program||scene.composition).layout,designIntent:(scene.program||scene.composition).designIntent,fingerprint:scene.program?filmFingerprint(scene.program):compositionFingerprint(scene.composition)})),preferences:(source.artInstruction?'当前镜头修改要求：'+source.artInstruction+'\n':'')+rules.join('\n'),beatTimes:canApplyMusicBeat(target)?target.musicAnalysis.beats.filter(t=>t>=source.start&&t<source.start+source.duration).map(t=>t-source.start):[],referenceStyle:'独立构图、真实物件结构、关系与数量随推演变化；黑金参考采用衬线字、细线、暖光与克制尘点。禁止重复圆点仅换标签。'};
+  return {scene:{title:source.title,narration:source.narration,caption:source.caption,duration:source.duration,kind:source.kind,visual:source.visual},index,sceneCount:target.scenes.length,project:{title:target.title,topic:target.topic,summary:target.summary||'',duration:target.duration,ratio:target.ratio,style:target.style,brief:target.brief||'',scenes:target.scenes.map(scene=>({title:scene.title,kind:String(scene.kind||'process').replace(/^script:/,''),visual:scene.visual}))},previousDesigns:target.scenes.filter((scene,i)=>i!==index&&artReady(scene)).map(scene=>({layout:(scene.program||scene.composition).layout,designIntent:(scene.program||scene.composition).designIntent,fingerprint:scene.program?filmFingerprint(scene.program):compositionFingerprint(scene.composition)})),preferences:(source.artInstruction?'当前镜头修改要求：'+source.artInstruction+'\n':'')+rules.join('\n'),beatTimes:canApplyMusicBeat(target)?sceneMusicBeats(musicAnalysis(target),source.start,source.duration):[],referenceStyle:'独立构图、真实物件结构、关系与数量随推演变化；黑金参考采用衬线字、细线、暖光与克制尘点。禁止重复圆点仅换标签。'};
 }
-function canApplyMusicBeat(p=project){return p.musicBlob instanceof Blob&&p.musicAnalysis?.reliable===true&&Number(p.musicAnalysis.confidence)>=.6&&Array.isArray(p.musicAnalysis.beats)&&p.musicAnalysis.beats.length>=4;}
+function canApplyMusicBeat(p=project){return validRhythm(musicAnalysis(p));}
 function refreshMusicAnalysisStatus(){
   const status=$('musicAnalysisStatus'),button=$('alignMusicButton');if(!status||!button)return;
-  if(!(project.musicBlob instanceof Blob)){status.textContent='未上传配乐，尚未分析音乐节拍。默认程序配乐不冒充已分析的音乐。';button.hidden=true;return;}
-  const analysis=project.musicAnalysis;
-  if(!analysis){status.textContent='已上传配乐，节拍尚未完成分析；不会强制卡点。';button.hidden=true;return;}
+  const source=musicSource(project),analysis=musicAnalysis(project),name=source==='default'?DEFAULT_MUSIC.title:source==='custom'?'自选配乐':'原创氛围配乐';
+  $('musicSourceSelect').value=source;
+  $('beatSyncToggle').checked=project.settings.rhythmEnabled!==false;
+  const plan=buildRhythmPlan(Number($('durationSelect').value)||90,analysis),stats=timelineRhythmStats(project,analysis);
+  $('rhythmPlanHint').textContent=$('beatSyncToggle').checked?`${$('durationSelect').value} 秒建议约 ${plan.sceneCount} 镜；镜头越多，模型调用越多，可先做前2镜样片。`:'已关闭密集卡点，按讲解需要安排镜头。';
+  $('musicTrackLabel').textContent=name+(canApplyMusicBeat()?` · ${Number(analysis.bpm||0).toFixed(1)} BPM · ${stats.aligned}/${stats.total} 次切换贴近拍点`:' · 节拍未可靠识别');
+  if(!analysis){status.textContent='自选配乐未在本页载入，请上传音频或选择默认 We Never。';button.hidden=true;return;}
   const score=Math.round(Math.max(0,Math.min(1,Number(analysis.confidence)||0))*100),bpm=Number.isFinite(Number(analysis.bpm))&&Number(analysis.bpm)>0?'估计约 '+Math.round(Number(analysis.bpm))+' BPM · ':'';
-  status.textContent=canApplyMusicBeat()?bpm+'节拍评分 '+score+'/100，节拍较清晰；后续绘制会轻度对齐，保留原有推演。':bpm+'节拍评分 '+score+'/100，当前节拍不够稳定；保留原时序，不强制卡点。';
-  button.hidden=!canApplyMusicBeat()||!project.scenes.some(artReady);button.disabled=busy;
+  status.textContent=source==='default'?`默认配乐已换为 ${DEFAULT_MUSIC.title}（用户视频提取版）。约 ${analysis.bpm} BPM，按实测起音安排切换；长视频循环主体段落，片尾淡出。已有旧镜头不会自动重新分镜。`:source==='original'?'原创配乐使用已知合成节奏；未冒充实测音源。':canApplyMusicBeat()?bpm+'节拍评分 '+score+'/100，后续切换会优先落在检测到的拍点。':bpm+'节拍评分 '+score+'/100，未能可靠识别，保留必要阅读时长。';
+  button.textContent='查看按配乐重新分镜的计划';button.hidden=!canApplyMusicBeat();button.disabled=busy;
 }
 function applyMusicBeatToCurrentScenes(){
-  if(busy)return toast('请等当前任务完成。');
-  if(!canApplyMusicBeat())return toast('当前没有可靠的已上传音乐节拍，保留原画面时序。');
-  pause();pushUndo();let count=0;
-  for(const scene of project.scenes){if(!artReady(scene)||!scene.composition)continue;const candidate=snapCompositionToBeats(scene.composition,scene.start,scene.duration,project.musicAnalysis);scene.composition=validateComposition(candidate);count++;}
-  markChanged();toast('已在本地轻度对齐 '+count+' 镜声明式画面的邻近节拍；新代码镜头在生成时读取节拍，可选重做当前镜头。');
+  showRhythmPlan();
+}
+function showRhythmPlan(){
+  const analysis=musicAnalysis(project),duration=Number($('durationSelect').value)||90,plan=buildRhythmPlan(duration,analysis),fragment=el('div');
+  fragment.append(el('p','modal-copy',`${plan.sceneCount} 镜 · ${plan.alignedCuts}/${plan.totalCuts} 次切换可落在检测拍点。每镜保留讲解和阅读时间；不按每一拍机械切换。生成这些镜头会增加模型调用，可先选择前2镜样片。`));
+  if(analysis?.waveform?.length){const wave=el('div','rhythm-wave');wave.setAttribute('role','img');wave.setAttribute('aria-label','实际音轨波形概览，竖线为建议切换点');for(let i=0;i<120;i++){const t=musicTimeAt((i+.5)/120*duration,analysis),value=analysis.waveform[Math.min(analysis.waveform.length-1,Math.floor(t/analysis.duration*analysis.waveform.length))],bar=el('span');bar.style.height=Math.max(3,Math.min(100,value*90))+'%';wave.append(bar);}for(const shot of plan.shots.slice(1)){const marker=el('i');marker.style.left=shot.start/duration*100+'%';marker.title=`第 ${shot.index} 镜 · ${shot.start.toFixed(2)} 秒`;wave.append(marker);}fragment.append(wave,el('p','review-note','实际音轨波形概览；竖线是建议切换点，长视频按相同主体段落循环。'));}
+  const list=el('div','rhythm-cut-list');for(const shot of plan.shots){const row=el('div');row.append(el('strong','',String(shot.index).padStart(2,'0')),el('span','',`${shot.start.toFixed(2)}–${shot.end.toFixed(2)} 秒`),el('small','',shot.index===1?'开场':shot.cutOnBeat?'实测拍点切换':'保留阅读停顿'));list.append(row);}fragment.append(list);
+  fragment.append(el('p','modal-copy','这是切换时间预案，不代表画面已生成。应用会重新请求当前主题的分镜，再制作所选流程的画面；分镜成功前保留原项目，其他已提交任务仍可在原项目查询。'));
+  const button=el('button','button primary','使用卡点计划生成');button.type='button';button.disabled=busy;button.addEventListener('click',()=>{project.settings.rhythmEnabled=true;$('beatSyncToggle').checked=true;closeModal();generateProject({preventDefault(){}});});fragment.append(button);openModal('跟着音乐，让知识推进',fragment,'MUSIC CUT PLAN');
 }
 function applyBirthdayBrief(){
   if(busy)return toast('请等当前任务完成后再套用方案。');
@@ -425,6 +435,7 @@ function setBusy(value, message) {
   $('generateButton').disabled = value;
   $('reviewRoundsSelect').disabled=value;
   $('creationWorkflow').disabled=value;$('sceneRecoveryPolicy').disabled=value;
+  $('musicSourceSelect').disabled=value;$('beatSyncToggle').disabled=value;$('viewRhythmPlanButton').disabled=value;
   $('redesignSceneButton').disabled=value;$('rewriteSceneButton').disabled=value;
   $('reviseButton').disabled = value;
   $('sceneVideoButton').disabled = value;
@@ -830,13 +841,13 @@ async function generateProject(event) {
     const sourceMusic=project.musicBlob,sourceMusicAnalysis=project.musicAnalysis;
     const directing=directingBriefForTopic({topic,brief:$('briefInput').value,boundTopic:briefBinding.topic,boundBrief:briefBinding.brief,reuse:$('reuseBriefToggle').checked});
     if(directing.skipped){$('topicHint').textContent='新主题：本次未沿用旧主题的导演脚本；个人偏好与画面风格继续使用。';}
-    const options={topic,brief:directing.brief.slice(0,18000),duration:Number($('durationSelect').value),ratio:selectedRatio,style:selectedStyle,mode:selectedMode,audience:'普通成年人',preferences:rules.join('\n')};
+    const options={topic,brief:directing.brief.slice(0,18000),duration:Number($('durationSelect').value),ratio:selectedRatio,style:selectedStyle,mode:selectedMode,audience:'普通成年人',preferences:rules.join('\n'),rhythmEnabled:$('beatSyncToggle').checked,musicSource:musicSource(project),musicStyle:project.settings.musicStyle||'ambient',musicAnalysis:musicSource(project)==='custom'?musicAnalysis(project):null};
     const script=await api.generateScript(configs.text,options,{signal:activeAbort.signal,onRepair:info=>setGenerationProgress({stage:'第一步 · 正在整理返回的分镜（1 / 1）',detail:info.reason+' 正在保留原内容并修正格式；此次会追加一次文本模型请求。'})});
     const next=engine.createProjectFromScript(script,options);if(!validProject(next))throw new Error('模型返回的分镜结构不完整，原项目保留。');
     pushUndo();project=next;storyboardApplied=true;project.mode=selectedMode;project.brief=options.brief;project.scriptMeta=script.apiMeta;if(sourceMusic instanceof Blob){project.musicBlob=sourceMusic;if(sourceMusicAnalysis)project.musicAnalysis=sourceMusicAnalysis;}project.isDemo=false;project.generatedFromApi=true;hasGenerated=true;
     runDiagnostics.begin(project);$('briefInput').value=options.brief;briefBinding={topic,brief:options.brief};
     if(script.normalizations?.length)toast(script.normalizations.join(' '));
-    project.settings={music:$('musicToggle').checked,voice:$('voiceToggle').checked,captions:$('captionsToggle').checked};
+    project.settings={music:$('musicToggle').checked,voice:$('voiceToggle').checked,captions:$('captionsToggle').checked,musicSource:options.musicSource,musicStyle:options.musicStyle,rhythmEnabled:options.rhythmEnabled};project.rhythmPlan=script.rhythmPlan||null;
     project.scenes.forEach(scene=>{scene.renderState='pending';delete scene.composition;delete scene.program;});selectedIndex=0;currentTime=0;releaseClipURL();updateProjectUI();saveLocal();
     const workflow=$('creationWorkflow').value,indices=creationSceneIndices(project.scenes.length,workflow);
     if(indices.length)await renderSceneArts(project,indices,{signal:activeAbort.signal,stage:workflow==='pilot'?'第二步 · 前两镜样片制作':'第二步 · 逐镜独立设计画面'});
@@ -1174,6 +1185,10 @@ $('downloadScriptFailure').addEventListener('click',()=>{if(!lastScriptFailure)r
 $('birthdayBriefButton').addEventListener('click',applyBirthdayBrief);
 $('clearGenerationFailures').addEventListener('click',()=>{runDiagnostics.clear();renderSceneFailures();});
 $('alignMusicButton').addEventListener('click',applyMusicBeatToCurrentScenes);
+$('viewRhythmPlanButton').addEventListener('click',showRhythmPlan);
+$('durationSelect').addEventListener('change',refreshMusicAnalysisStatus);
+$('beatSyncToggle').addEventListener('change',()=>{project.settings.rhythmEnabled=$('beatSyncToggle').checked;saveLocal();refreshMusicAnalysisStatus();});
+$('musicSourceSelect').addEventListener('change',()=>{if(busy)return;pause();pushUndo();project.settings.musicSource=$('musicSourceSelect').value;project.settings.music=true;markChanged();if(project.settings.musicSource==='custom'&&!(project.musicBlob instanceof Blob))$('musicFile').click();});
 $('cancelGenerationButton').addEventListener('click',()=>{if(activeAbort){activeAbort.abort();$('generationDetail').textContent='正在取消尚未完成的请求，保留已完成的画面。';}});
 $('retrySceneButton').addEventListener('click',()=>retrySceneArt([selectedIndex]));
 $('workflowHelpButton').addEventListener('click',()=>openModal('先试两镜，再铺全片','<p class="modal-copy">选择“先生成前 2 镜样片”，先检查风格、文字大小和讲解是否清楚。满意后在时间线按范围补齐其余镜头；其余镜头不会自动提交。也可以只生成分镜，先编辑文案再制作画面。</p><p class="modal-copy">画面出错时，可以继续修复旧代码，也可以保留文案重新设计；需要简化讲解时，再选择“简化本镜文案并重做”。重做范围只包含当前镜头，可撤销。</p><p class="modal-copy">“真实关键帧”来自本页实际渲染，可点击放大。机器检查能发现重叠、越界和部分运动问题，仍需你判断画面是否好看、知识是否讲清。AI 视频和配音按需单独提交，费用以服务商账单为准。</p>','CREATION WORKFLOW'));
@@ -1286,7 +1301,7 @@ $('musicFile').addEventListener('change',async event=>{
     if(file.size>50*1024*1024)throw new Error('请选择 50 MB 以内的音频。');
     let analysis;try{analysis=await analyzeMusicFile(file);}catch(error){await audioDuration(file);analysis={duration:0,bpm:null,confidence:0,beats:[],sections:[],reliable:false,method:'analysis-unavailable',warnings:[error.message]};}
     if(project!==target)throw new Error('项目已切换，没有把音轨写入其他项目。');
-    pushUndo();project.musicBlob=file;project.musicAnalysis=analysis;project.settings.music=true;markChanged();toast(canApplyMusicBeat()?'配乐已载入，节拍较清晰。可本地对齐现有画面，后续绘制也会轻度贴合节拍。':'配乐已载入，但未找到足够稳定的节拍，保留原画面时序。');
+    pushUndo();project.musicBlob=file;project.musicAnalysis=analysis;project.settings.music=true;project.settings.musicSource='custom';markChanged();toast(canApplyMusicBeat()?'配乐已载入，后续分镜将根据检测拍点安排切换。':'配乐已载入，但未找到足够稳定的节拍，保留原画面时序。');
   }catch(error){toast('无法使用这份音频：'+error.message,true);}
   finally{setBusy(false);refreshMusicAnalysisStatus();updateProjectUI(false);event.target.value='';}
 });

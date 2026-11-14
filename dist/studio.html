@@ -54,7 +54,7 @@
   </aside>
   <div class="app-shell">
     <header class="topbar">
-      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.8.0</span></div>
+      <div class="wordmark"><strong>见知</strong><span>VIBE STUDIO</span><i></i><span class="workspace-name">我的创作空间</span><span class="version-label">v0.9.0</span></div>
       <div class="topbar-actions">
         <span class="save-state" id="saveState"><span></span>已保存到本机</span>
         <label class="ui-font-control" for="uiFontSize"><span>界面字号</span><select id="uiFontSize" aria-label="界面字号"><option value="18">18px</option><option value="20">20px</option><option value="22">22px</option></select></label>
@@ -107,6 +107,8 @@
             <div class="skill-status"><span class="status-dot"></span><a href="https://github.com/HeyChengC/vibe-knowledge-film" target="_blank" rel="noopener noreferrer">vibe-knowledge-film 已接入 ↗</a><small>现写代码 · 实际渲染 · 看图返修</small></div>
             <label class="field-label" for="reviewRoundsSelect">视觉返修轮数</label><select id="reviewRoundsSelect"><option value="2" selected>2 轮 · 推荐质量</option><option value="1">1 轮 · 减少调用</option><option value="0">仅代码与静帧检查 · 费用较低</option></select><p class="review-note">每镜 1 次代码生成 + 所选轮数的看图返修。代码 / 返回格式 / 排版问题合计最多追加 1 次文本模型修复，仍失败按所选策略继续或暂停，并保留代码；分镜格式整理也最多追加 1 次请求。实际阶段与完成数会显示在进度条中。</p>
             <div class="workflow-options"><button class="text-button" id="workflowHelpButton" type="button">先做样片，再铺全片 ↗</button>
+              <label class="field-label" for="musicSourceSelect">配乐</label><select id="musicSourceSelect"><option value="default">We Never（Vibe知识大赏）· 默认</option><option value="custom">我上传的配乐</option><option value="original">原创氛围配乐</option></select>
+              <label class="brief-reuse"><input type="checkbox" id="beatSyncToggle" checked>更多分镜，切换尽量跟随音乐拍点</label><p class="review-note" id="rhythmPlanHint"></p><button class="text-button" id="viewRhythmPlanButton" type="button">查看拍点与切换计划 ↗</button>
               <label class="field-label" for="creationWorkflow">生成流程</label><select id="creationWorkflow"><option value="all">分镜后生成全部画面</option><option value="pilot">先生成前 2 镜样片 · 推荐</option><option value="storyboard">只生成分镜，画面按范围制作</option></select>
               <label class="field-label" for="sceneRecoveryPolicy">画面仍报错时</label><select id="sceneRecoveryPolicy"><option value="redesign">保留文案，重设计 1 次</option><option value="rewrite">简化本镜文案，再重设计 1 次</option><option value="stop">保留诊断，手动处理</option></select>
               <p class="review-note">正常修复仍最多 1 次。重设计最多再增加 1 次文本请求；改写后重做最多增加 2 次。新稿再做本地验收，不循环重试。余额、鉴权、网络问题直接暂停。</p>
@@ -177,7 +179,7 @@
           <p class="scene-range-note">单镜代码错误最多自动修复一次；鉴权、限流、网络或服务配置错误会暂停整批。AI 视频镜头使用“选择并生成 AI 镜头”单独提交。</p>
         </section>
         <div class="timeline-track" id="timelineTrack"></div>
-        <div class="timeline-bottom"><span><i></i>原创氛围配乐 · 播放时实时合成</span><span id="projectStatus">当前为交互示意，尚未调用 API</span><button class="text-button" id="sourcesButton">知识来源<svg><use href="#i-arrow"/></svg></button></div>
+        <div class="timeline-bottom"><span id="musicTrackLabel"><i></i>We Never · 实测节拍</span><span id="projectStatus">当前为交互示意，尚未调用 API</span><button class="text-button" id="sourcesButton">知识来源<svg><use href="#i-arrow"/></svg></button></div>
       </section>
       <footer class="page-footer"><span>见知，让每一份好奇都有回响。</span><div><a href="./source.zip" class="license-link" download>下载源码</a><a href="./licenses.html" class="license-link">开源许可</a><button id="aboutButton">关于这个原型 <svg><use href="#i-info"/></svg></button></div></footer>
     </main>

@@ -7,7 +7,7 @@ export const FILM_METHOD=`使用已接入的 vibe-knowledge-film 方法：先找
 每镜建立→动作→落定，让动作服务知识，留阅读停顿；前后镜头同一物件延续但必须推进机制，不能整片只有同一幅图。
 `;
 export const CODE_API=`运行环境：使用上游 VK 引擎，返回 draw(fr,t,scene,VK) 的函数体字符串 source，不能包含函数外壳、import、HTML、fetch或Markdown。
-fr.w/fr.h为实际像素，必须以W=fr.w,H=fr.h,S=Math.min(W,H)和归一化比例布局，兼容提供的ratio。t为当前镜内秒数，scene.duration总秒数，p=VK.clamp(t/scene.duration)。scene.palette含bg,ink,gold,accent,muted,blue等网页配色。scene.beatTimes为已上传配乐在本镜的实际秒数（没有则空），可优先让关键事件对齐相近节拍，不能凭空宣称分析过音乐。
+fr.w/fr.h为实际像素，必须以W=fr.w,H=fr.h,S=Math.min(W,H)和归一化比例布局，兼容提供的ratio。t为当前镜内秒数，scene.duration总秒数，p=VK.clamp(t/scene.duration)。scene.palette含bg,ink,gold,accent,muted,blue等网页配色。scene.beatTimes为已上传配乐在本镜的实际秒数（没有则空），若提供实际beatTimes，关键数字亮起、推演转折和画面重组应优先对齐相近拍点：用fr.cue(.3)获取接近镜内30%位置的拍点秒数，再用于VK.ss(t,开始秒,结束秒)。fr.cue(0)=0、fr.cue(1)=scene.duration；事件开始与结束需不同，不能因卡点把动作压成瞬移。没有拍点时fr.cue会保留原比例时刻，不能凭空宣称分析过音乐。
 函数接口：VK.clamp(x,a=0,b=1), VK.lerp(a,b,k), VK.ss(t,start,end), VK.seg(t,start,end), VK.smooth(k), VK.E.io3(k), VK.E.out3(k), VK.hash(n), VK.rng(seed), VK.rgba(hex,a), VK.mix(c1,c2,k)。这些数学函数也提供同名短别名（ss、lerp、clamp、seg、smooth、E、fade、hash、rng、noise1、hex、rgba、mix、fontOf），W/H为画布大小，PI/TAU为数学常量。优先显式写VK.ss/VK.lerp；其它变量、函数和ctx必须在代码里声明，ctx可定义为fr.x。不得调用未提供的函数或假想接口。所有对象从t重新计算，禁止Math.random、跨帧状态、Date、异步或运行环境访问。
 Frame接口（参数必须准确）：
 fr.g({a:透明度,at:[x,y],s:缩放或[sx,sy],rot:弧度,clip:[x,y,w,h]},()=>{...}); at是新局部原点，内部画在0,0附近，绝不能再次把同一个x,y加进去。若内部仍用绝对坐标，改用fr.pivot(cx,cy,{s:缩放,a},()=>{...})围绕指定点缩放。

@@ -1,0 +1,7 @@
+Default recording: We Never (Vibe knowledge video), from the user-provided video.
+At the user's request, its AAC audio was extracted without changing speed;
+trailing silence and the platform outro were removed. The original video is not published.
+
+This recording is not covered by the project's source-code license. No claim
+is made that it is royalty-free or that unrelated third parties own reuse rights.
+The JavaScript waveform/beat measurements are derived from this supplied recording.

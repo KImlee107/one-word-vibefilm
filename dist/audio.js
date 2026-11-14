@@ -1,5 +1,6 @@
 // Original procedural score and browser-only audio mixing. No remote requests.
 import {MAX_PROJECT_DURATION} from './presets.js';
+import {musicBlob,musicAnalysis,musicSource} from './music.js';
 const decoded = new WeakMap();
 const mixes = new WeakMap();
 const AC = () => globalThis.AudioContext || globalThis.webkitAudioContext;
@@ -42,7 +43,7 @@ export async function prepareAudioMix(project) {
   const voices=settings.voice===false?[]:(project.voiceClips?.length?project.voiceClips:(project.voiceBlob?[{blob:project.voiceBlob,start:0}]:[]));
   const music=settings.music!==false;
   if(!voices.length&&!music) return null;
-  const key=[music,settings.voice,settings.musicStyle,project.musicBlob,project.voiceBlob,project.duration,...voices.flatMap(c=>[c.blob,c.start,c.duration,c.sourceOffset])];
+  const key=[music,settings.voice,settings.musicStyle,musicSource(project),project.musicBlob,project.voiceBlob,project.duration,...voices.flatMap(c=>[c.blob,c.start,c.duration,c.sourceOffset])];
   const previous=mixes.get(project);
   if(previous && key.every((v,i)=>v===previous.key[i])) return previous.promise;
   const promise=(async()=>{
@@ -65,10 +66,11 @@ export async function prepareAudioMix(project) {
         if(maxLength>0){source.start(start,sourceOffset,maxLength);clips.push({start,end:start+maxLength});}
       }
       if(music){
-        const audio=project.musicBlob?await decode(context,project.musicBlob):createMusicBuffer(context,duration,settings.musicStyle);
+        const blob=await musicBlob(project),audio=blob?await decode(context,blob):createMusicBuffer(context,duration,settings.musicStyle);
         if(audio){
           const source=offline.createBufferSource();source.buffer=audio;source.loop=true;
-          const gain=offline.createGain();const level=project.musicBlob?0.25:0.9;
+          const analysis=musicAnalysis(project);if(analysis?.loopEnd>analysis?.loopStart&&analysis.loopEnd<=audio.duration){source.loopStart=analysis.loopStart;source.loopEnd=analysis.loopEnd;}
+          const gain=offline.createGain();const level=blob?0.25:0.9;
           gain.gain.setValueAtTime(level,0);
           for(const clip of clips){
             gain.gain.setValueAtTime(level,Math.max(0,clip.start-0.18));

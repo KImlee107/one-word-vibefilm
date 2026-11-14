@@ -57,6 +57,13 @@ function makeFilm(message){
   // Small drawing primitives, never complete scene templates. Positions inside
   // pivot remain absolute, unlike g({at}), which creates a local coordinate origin.
   film.fr.pivot=function(x,y,o,fn){this.g({...o,at:[x,y]},()=>this.g({at:[-x,-y]},fn));};
+  film.fr.cue=function(fraction){
+    const f=G.VK.clamp(fraction),target=parameters.duration*f;
+    if(f===0||f===1||!parameters.beatTimes?.length)return target;
+    let best=target,distance=Math.min(.65,parameters.duration*.16);
+    for(const time of parameters.beatTimes){if(time<=0||time>=parameters.duration)continue;const d=Math.abs(time-target);if(d<distance){distance=d;best=time;}}
+    return best;
+  };
   film.fr.fraction=function(n,d,x,y,o={}){
     if(n===undefined||d===undefined||String(n).trim()===''||String(d).trim()===''||Number(d)===0)throw new Error('分数必须有完整分子和非零分母。');
     const size=Math.max(Math.min(width,height)*.034,Number(o.size)||Math.min(width,height)*.05),font=o.font||'serif';

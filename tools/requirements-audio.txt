@@ -1,0 +1,3 @@
+# Optional offline analysis only; not required to run the website.
+numpy==2.3.5
+scipy==1.17.0

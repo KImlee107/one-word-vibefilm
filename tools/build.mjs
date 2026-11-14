@@ -2,7 +2,7 @@ import {readFile,writeFile,mkdir,readdir,stat,copyFile} from 'node:fs/promises';
 import {resolve,relative,extname} from 'node:path';
 import {build} from 'esbuild';
 const root=resolve(import.meta.dirname,'..');
-const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.txt':'text/plain; charset=utf-8','.md':'text/markdown; charset=utf-8','.woff':'font/woff'};
+const types={'.m4a':'audio/mp4','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.txt':'text/plain; charset=utf-8','.md':'text/markdown; charset=utf-8','.woff':'font/woff'};
 await mkdir(resolve(root,'dist/vendor'),{recursive:true});
 await copyFile(resolve(root,'node_modules/mediabunny/dist/bundles/mediabunny.min.mjs'),resolve(root,'dist/vendor/mediabunny.mjs'));
 await copyFile(resolve(root,'node_modules/mediabunny/LICENSE'),resolve(root,'dist/vendor/mediabunny-LICENSE.txt'));
