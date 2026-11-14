@@ -1,4 +1,6 @@
-# 见知 · Vibe Studio
+# one-word-vibefilm
+
+## 见知 · Vibe Studio
 
 一个可逐镜预览、修改和导出的知识视频网站。用户自行配置模型 API 后生成内容。本次交付不包含预生成视频，也没有调用付费模型。
 
